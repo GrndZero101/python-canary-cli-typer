@@ -1,0 +1,59 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv run:*)",
+      "Bash(uv add:*)",
+      "Bash(uv sync:*)",
+      "Bash(uv tool:*)",
+      "Bash(uv lock:*)",
+      "Bash(ruff:*)",
+      "Bash(ty:*)",
+      "Bash(rumdl:*)",
+      "Bash(prek:*)",
+      "mcp__context7__query-docs",
+      "mcp__context7__resolve-library-id"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "git status --short --branch",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --no-sync python tools/branch_guard.py --protected main master",
+            "timeout": 15,
+            "statusMessage": "Checking branch..."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --no-sync python tools/gate.py",
+            "timeout": 120,
+            "statusMessage": "Formatting and checking..."
+          }
+        ]
+      }
+    ]
+  },
+  "enabledPlugins": {
+    "commit-commands@claude-plugins-official": false
+  }
+}
