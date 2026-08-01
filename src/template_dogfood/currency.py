@@ -109,7 +109,7 @@ def _request_rate(client: httpx.Client, base: str, quote: str, timeout: float) -
     payload = json.loads(response.text, parse_float=Decimal)
     rates = payload["rates"]
     if quote not in rates:
-        msg = f"{quote} is not quoted against {base}; try `cli currency --help` for the format"
+        msg = f"{quote} is not quoted against {base}; try `tdf-cli currency --help` for the format"
         raise ValueError(msg)
     return RateQuote(
         base=payload["base"],
