@@ -10,9 +10,11 @@ by lint config and a `prek` gate — not just documented and hoped for.
 ## What's here
 
 - **`src/template_dogfood/`** — the package. It ships a demo
-  CLI (`cli`) with two subcommands, `geo` and `currency`, on the typer/httpx/pydantic/rich/loguru
-  stack, offline-tested via `httpx.MockTransport`. That is example code: pattern-match against it,
-  then delete it.
+  CLI (`tdf-cli`) with three subcommands, `geo`, `currency` and `weather`, on the
+  typer/httpx/pydantic/rich/loguru stack, offline-tested via `httpx.MockTransport`. That is example
+  code: pattern-match against it, then delete it. Named `tdf-cli` rather than `cli` because `cli` is
+  a built-in PowerShell alias for `Clear-Item` and would silently shadow an installed script of that
+  name on Windows.
 - **`tools/`** — the custom checks no off-the-shelf linter covers: `check_nested_defs.py` (no
   `def` inside a `def`), `branch_guard.py` and `gate.py` (the `PreToolUse`/`PostToolUse` hooks that
   block edits to `main` and run the lint gate on save), and `hook_payload.py` (shared parsing).
@@ -41,7 +43,7 @@ rumdl fmt . && rumdl check .                     # markdown
 uv run pytest                                    # tests
 uv run python tools/check_nested_defs.py src tests tools
 prek run --all-files                             # everything above, as one gate
-uv run cli --help                                # the demo CLI
+uv run tdf-cli --help                            # the demo CLI
 ```
 
 ## Updating from the template

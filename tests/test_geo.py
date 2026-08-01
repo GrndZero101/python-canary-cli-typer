@@ -120,7 +120,9 @@ def test_main_prints_matches_to_stdout(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     place = Place(display_name="Cleve, South Australia", lat=-33.7075, lon=136.4931, type="town")
-    monkeypatch.setattr("template_dogfood.geo.find_coordinates", functools.partial(_always, [place]))
+    monkeypatch.setattr(
+        "template_dogfood.geo.find_coordinates", functools.partial(_always, [place])
+    )
     assert main(["geo", "cleve"]) == 0
     captured = capsys.readouterr()
     assert "Cleve, South Australia" in captured.out
@@ -131,7 +133,9 @@ def test_main_output_json_emits_parseable_stdout(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     place = Place(display_name="Cleve, South Australia", lat=-33.7075, lon=136.4931, type="town")
-    monkeypatch.setattr("template_dogfood.geo.find_coordinates", functools.partial(_always, [place]))
+    monkeypatch.setattr(
+        "template_dogfood.geo.find_coordinates", functools.partial(_always, [place])
+    )
     assert main(["geo", "cleve", "--output", "json"]) == 0
     decoded = json.loads(capsys.readouterr().out)
     assert decoded[0]["display_name"] == "Cleve, South Australia"
