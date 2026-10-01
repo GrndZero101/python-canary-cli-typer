@@ -4,9 +4,10 @@
     tdf-cli currency 1000 GBP/AUD --margin 2.5
     tdf-cli weather cleve
 
-Named `tdf-cli`, not `cli` — on Windows PowerShell, `cli` is a built-in alias for
-`Clear-Item`, so an installed script by that name would silently lose to the alias
-unless invoked with an extension or full path.
+The script is deliberately not called `cli`. On Windows, `cli` is a read-only PowerShell alias
+for `Clear-Item`, and an alias beats an executable on PATH — so a command by that name is
+unreachable from the shell most Windows users are in. It is also not unique: every project
+installing a `cli` into the same environment would fight over the name.
 
 Each subcommand lives in its own module and is registered here as a plain function, not with
 its own nested `typer.Typer`. Registration by reference keeps `tdf-cli geo …` two words instead
@@ -20,8 +21,8 @@ instead and let the user or packager place it:
     _TDF_CLI_COMPLETE=source_zsh tdf-cli > "${ZDOTDIR:-$HOME}/completions/_tdf-cli"
 
 Note `source_zsh`, not `zsh_source` — typer inverts Click 8's order for backwards compatibility.
-Typer derives the completion env var by uppercasing `prog_name` and replacing `-` with `_`, so
-the hyphen in `tdf-cli` becomes a valid `_TDF_CLI_COMPLETE`.
+Typer derives that variable name by upper-casing `prog_name` and replacing `-` with `_`, so a
+hyphen in the script name is fine.
 """
 
 import sys
