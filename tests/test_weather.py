@@ -1,10 +1,9 @@
 """Tests for the weather lookup.
 
 No network: every request is served by an httpx MockTransport, so these are
-deterministic and run offline. Log assertions add a local loguru sink and
-disable the app's own logging setup, since loguru does not propagate to
-pytest's `caplog` and `configure_logging` would otherwise strip any sink a
-test installs.
+deterministic and run offline. Log assertions read captured stderr: the app
+callback points loguru at `sys.stderr` when `main` runs, which is the stream
+`capsys` has already swapped in.
 """
 
 import functools
@@ -12,7 +11,6 @@ import json
 
 import httpx
 import pytest
-from loguru import logger
 
 from template_dogfood.cli import main
 from template_dogfood.weather import WTTR_URL, WeatherReport, fetch_weather, render_weather_json
@@ -64,10 +62,6 @@ def _record_query(seen_queries: list[str], query: str, **_kwargs: object) -> Wea
         wind_speed_kmph=0.0,
         description="x",
     )
-
-
-def _no_op_configure_logging(*, verbose: bool = False) -> None:
-    """Stand in for configure_logging so a test's own sink survives."""
 
 
 def _no_data(*_args: object, **_kwargs: object) -> WeatherReport:
@@ -185,15 +179,10 @@ def test_main_reports_no_data_without_polluting_stdout(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     monkeypatch.setattr("template_dogfood.weather.fetch_weather", _no_data)
-    monkeypatch.setattr("template_dogfood.weather.configure_logging", _no_op_configure_logging)
-    messages: list[str] = []
-    sink_id = logger.add(lambda msg: messages.append(msg.record["message"]), format="{message}")
-    try:
-        assert main(["weather", "nowhere-at-all-xyz"]) == 1
-    finally:
-        logger.remove(sink_id)
-    assert not capsys.readouterr().out
-    assert any("no weather data found" in message for message in messages)
+    assert main(["weather", "nowhere-at-all-xyz"]) == 1
+    captured = capsys.readouterr()
+    assert not captured.out
+    assert "no weather data found" in captured.err
 
 
 def test_main_reports_unreachable_service_without_polluting_stdout(
@@ -201,15 +190,10 @@ def test_main_reports_unreachable_service_without_polluting_stdout(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     monkeypatch.setattr("template_dogfood.weather.fetch_weather", _unreachable)
-    monkeypatch.setattr("template_dogfood.weather.configure_logging", _no_op_configure_logging)
-    messages: list[str] = []
-    sink_id = logger.add(lambda msg: messages.append(msg.record["message"]), format="{message}")
-    try:
-        assert main(["weather", "cleve"]) == 1
-    finally:
-        logger.remove(sink_id)
-    assert not capsys.readouterr().out
-    assert any("could not reach" in message for message in messages)
+    assert main(["weather", "cleve"]) == 1
+    captured = capsys.readouterr()
+    assert not captured.out
+    assert "could not reach" in captured.err
 
 
 def test_wttr_url_is_the_official_endpoint() -> None:

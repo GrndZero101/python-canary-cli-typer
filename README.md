@@ -9,12 +9,11 @@ by lint config and a `prek` gate — not just documented and hoped for.
 
 ## What's here
 
-- **`src/template_dogfood/`** — the package. It ships a demo
-  CLI (`tdf-cli`) with three subcommands, `geo`, `currency` and `weather`, on the
-  typer/httpx/pydantic/rich/loguru stack, offline-tested via `httpx.MockTransport`. That is example
-  code: pattern-match against it, then delete it. Named `tdf-cli` rather than `cli` because `cli` is
-  a built-in PowerShell alias for `Clear-Item` and would silently shadow an installed script of that
-  name on Windows.
+- **`src/template_dogfood/`** — the package. It ships a
+  scaffold CLI, `tdf-cli`, on typer, pydantic-settings, rich and loguru, with one
+  placeholder command, `about`. Replace it or build beside it; the plumbing around it — settings,
+  output, logging, the entry point — is meant to stay. Built beside it: `weather`, which looks up
+  current conditions from wttr.in over httpx, offline-tested via `httpx.MockTransport`.
 - **`tools/`** — the custom checks no off-the-shelf linter covers: `check_nested_defs.py` (no
   `def` inside a `def`), `branch_guard.py` and `gate.py` (the `PreToolUse`/`PostToolUse` hooks that
   block edits to `main` and run the lint gate on save), `hook_payload.py` (shared parsing), and
@@ -60,7 +59,32 @@ rumdl fmt . && rumdl check .                     # markdown
 uv run pytest                                    # tests
 uv run python tools/check_nested_defs.py src tests tools
 prek run --all-files                             # everything above, as one gate
-uv run tdf-cli --help                            # the demo CLI
+```
+
+## Using the CLI
+
+```bash
+uv run tdf-cli --help
+uv run tdf-cli about                  # table on stdout
+uv run tdf-cli about --output json    # one JSON object on stdout
+uv run tdf-cli --verbose about        # global options go before the command
+uv run tdf-cli weather cleve          # current conditions from wttr.in
+```
+
+Every setting resolves **flag, then environment variable, then default**:
+
+| Setting | Flag | Environment variable | Default |
+|---|---|---|---|
+| Debug logging to stderr | `--verbose` / `--no-verbose` (global) | `TDF_CLI_VERBOSE` | off |
+| Output format | `--output` / `-o` (per command) | `TDF_CLI_OUTPUT` | `table` |
+
+The docstring of `config.py` says how to add a setting. An invalid value from either source exits
+2 with a message naming both the flag and the variable.
+
+Shell completion is emitted rather than installed:
+
+```bash
+_TDF_CLI_COMPLETE=source_zsh tdf-cli > "${ZDOTDIR:-$HOME}/completions/_tdf-cli"
 ```
 
 ## Updating from the template

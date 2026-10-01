@@ -1,42 +1,68 @@
-"""Tests for how the entry point handles missing required arguments.
+"""How `run_app` turns each typer outcome into an exit code.
 
-A subcommand invoked without a required argument shows its full `--help` text
-instead of click's terse "Error: Missing argument" line, so a user who is unsure
-of a subcommand's shape gets the same answer whether they type nothing or ask
-explicitly. A command whose arguments are all defaulted is unaffected, since it
-never raises the underlying `MissingParameter` error in the first place.
+Runs against a small app declared here rather than the real one, so every path — success, an
+explicit exit code, a missing argument, an unknown option — exists regardless of which commands
+the project currently has.
 """
 
+from typing import Annotated
+
 import pytest
+import typer
 
-from template_dogfood.cli import main
+from template_dogfood.typer_entrypoint import run_app
 
-
-def test_bare_subcommand_shows_full_help(capsys: pytest.CaptureFixture[str]) -> None:
-    assert main(["currency"]) == 0
-    captured = capsys.readouterr().out
-    assert "Convert an amount between currencies" in captured
-    assert "amount to convert" in captured
-    assert "currency pair" in captured
+EXIT_CODE = 3
 
 
-def test_bare_subcommand_help_matches_explicit_help(
+def greet(name: Annotated[str, typer.Argument(help="who to greet")]) -> None:
+    """Greet someone."""
+    typer.echo(f"hello {name}")
+
+
+def fail() -> None:
+    """Exit with a specific code."""
+    raise typer.Exit(EXIT_CODE)
+
+
+app = typer.Typer(no_args_is_help=True)
+app.command("greet")(greet)
+app.command("fail")(fail)
+
+
+def _run(argv: list[str]) -> int:
+    return run_app(app, argv, prog_name="probe")
+
+
+def test_success_is_zero(capsys: pytest.CaptureFixture[str]) -> None:
+    assert _run(["greet", "world"]) == 0
+    assert capsys.readouterr().out == "hello world\n"
+
+
+def test_an_explicit_exit_code_is_returned() -> None:
+    assert _run(["fail"]) == EXIT_CODE
+
+
+def test_bare_invocation_is_a_request_for_help_not_an_error() -> None:
+    assert _run([]) == 0
+
+
+def test_unknown_option_is_a_usage_error() -> None:
+    assert _run(["greet", "--bogus"]) == 2
+
+
+def test_missing_argument_shows_full_help_and_the_error_on_stderr(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    main(["currency"])
-    bare = capsys.readouterr().out
-    main(["currency", "--help"])
+    assert _run(["greet"]) == 2
+    captured = capsys.readouterr()
+    assert not captured.out, "help on stdout would land in a pipe"
+    assert "who to greet" in captured.err
+    assert "Missing argument" in captured.err
+
+
+def test_missing_argument_help_matches_explicit_help(capsys: pytest.CaptureFixture[str]) -> None:
+    _run(["greet", "--help"])
     explicit = capsys.readouterr().out
-    assert bare == explicit
-
-
-def test_partial_arguments_also_show_full_help(capsys: pytest.CaptureFixture[str]) -> None:
-    """One of two required arguments given is still an omission, not a full call."""
-    assert main(["currency", "1000"]) == 0
-    assert "currency pair" in capsys.readouterr().out
-
-
-def test_unknown_subcommand_is_still_a_usage_error(capsys: pytest.CaptureFixture[str]) -> None:
-    """A typo in the subcommand name is a different failure than a missing argument."""
-    assert main(["bogus"]) == 2
-    assert "Error" in capsys.readouterr().err
+    _run(["greet"])
+    assert explicit.strip() in capsys.readouterr().err

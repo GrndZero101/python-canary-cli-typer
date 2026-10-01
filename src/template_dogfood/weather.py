@@ -17,8 +17,9 @@ from loguru import logger
 from pydantic import BaseModel
 from rich.table import Table
 
-from .logging_setup import configure_logging
-from .output import OutputFormat, OutputOption, out
+from .config import load_settings
+from .options import OutputOption, global_options
+from .output import OutputFormat, out
 
 WTTR_URL = "https://wttr.in"
 DEFAULT_TIMEOUT_SECONDS = 10.0
@@ -112,21 +113,18 @@ def emit(report: WeatherReport, fmt: OutputFormat) -> None:
 
 
 def weather(
+    ctx: typer.Context,
     location: Annotated[
         list[str],
         typer.Argument(help="free-text place name, e.g. cleve or 'cleve, south australia'"),
     ],
-    output: OutputOption = OutputFormat.table,
+    output: OutputOption = None,
     timeout: Annotated[
         float, typer.Option(help="request timeout in seconds")
     ] = DEFAULT_TIMEOUT_SECONDS,
-    *,
-    verbose: Annotated[
-        bool, typer.Option("-v", "--verbose", help="log request details to stderr")
-    ] = False,
 ) -> None:
     """Look up current weather conditions for a town, village or city."""
-    configure_logging(verbose=verbose)
+    settings = load_settings(verbose=global_options(ctx).verbose, output=output)
     query = " ".join(location)
     logger.debug("querying wttr.in for {!r}", query)
     try:
@@ -138,4 +136,4 @@ def weather(
         logger.error(str(exc))
         raise typer.Exit(1) from None
 
-    emit(report, output)
+    emit(report, settings.output)
