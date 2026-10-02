@@ -64,9 +64,9 @@ def _request_weather(
     response.raise_for_status()
     try:
         payload = response.json()
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as exc:
         msg = f"no weather data found for {location!r}"
-        raise ValueError(msg) from None
+        raise ValueError(msg) from exc
     return _parse_weather_report(location, payload)
 
 
@@ -129,11 +129,11 @@ def weather(
     logger.debug("querying wttr.in for {!r}", query)
     try:
         report = fetch_weather(query, timeout=timeout)
-    except httpx.HTTPError:
+    except httpx.HTTPError as exc:
         logger.exception("could not reach {}", WTTR_URL)
-        raise typer.Exit(1) from None
+        raise typer.Exit(1) from exc
     except ValueError as exc:
         logger.error(str(exc))
-        raise typer.Exit(1) from None
+        raise typer.Exit(1) from exc
 
     emit(report, settings.output)
