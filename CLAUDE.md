@@ -1,7 +1,8 @@
 # Python rules
 
 Enforced by a PostToolUse hook that auto-formats, then blocks on anything left. Violations block
-the edit — fix them, don't work around them.
+the edit — fix them, don't work around them. A Stop hook checks every changed file again, and runs
+the tests, before a turn can end, so a file changed by `sed` or a heredoc is caught too.
 
 ## Structure
 
@@ -31,10 +32,12 @@ Every rule here exists so a human can stop the program and inspect it.
 - Inject dependencies — clock, rng, HTTP client, paths — as parameters with defaults. Never reach
   for module-level mutable state.
   *Why: a function must be re-runnable in isolation from a breakpoint, with values you choose.*
-- Never swallow an exception. `raise ... from e`, or `logger.exception(...)`.
+- Never swallow an exception. `raise ... from e`, or `logger.exception(...)` — never
+  `raise ... from None`, which discards the cause just as surely.
   *Why: a bare `except: pass` destroys the traceback that tells you where it started.*
-- A configured logger writing to **stderr**, never `print`, outside a `__main__` block. Stdlib
-  `logging` by default; `loguru` where a stack skill says so.
+- Diagnostics go to a configured logger writing to **stderr**; data goes out with
+  `sys.stdout.write`. Never `print`, not even in a `__main__` block. Stdlib `logging` by default;
+  `loguru` where a stack skill says so.
   *Why: stdout is reserved for a command's data, so it stays pipeable. Diagnostics that land there
   corrupt the output a caller is parsing.*
 - Every module that can run standalone gets `if __name__ == "__main__":`.
@@ -76,16 +79,22 @@ which rest on your own discipline.
 
 | Rule | Enforced by |
 |---|---|
-| No `def` inside a function | `tools/check_nested_defs.py` |
+| No `def` inside a function, unless it is returned | `tools/check_conventions.py` `nested-def` |
+| No `class` inside a function | `tools/check_conventions.py` `nested-class` |
+| No comprehension with two `for`s, or inside another | `tools/check_conventions.py` `complex-comprehension` |
 | Guard clauses; ≤3 nested blocks | `PLR1702` |
 | ≤40 statements, complexity ≤8, ≤12 locals, ≤5 args | `PLR0915` `C901` `PLR0914` `PLR0913` |
-| No `print` outside `__main__` | `T20` |
+| No `print`, `__main__` blocks included (`tools/` exempt) | `T20` |
 | Correct logging calls | `LOG` `G` — **stdlib only**; neither sees `loguru` call sites |
 | Never swallow exceptions; `raise ... from e` | `BLE` `B904` `TRY` |
+| Never `raise ... from None` | `tools/check_conventions.py` `raise-from-none` — `B904` accepts it |
+| No `getattr`/`setattr`/`delattr` with a computed name | `tools/check_conventions.py` `dynamic-attribute` |
+| A module defining `main` has an `if __name__ == "__main__":` block | `tools/check_conventions.py` `missing-main-guard` |
 | Full annotations on public signatures | `ANN` + `ty` |
 | Docstrings on public functions/classes | `D101` `D102` `D103` |
 | No lambda assigned to a name | `E731` |
 | Timezone-aware datetimes | `DTZ` |
+| A deprecation warning fails the test that triggers it | pytest `filterwarnings = ["error"]` |
 | No unused args, no private-member access | `ARG` `SLF` |
 | `pathlib` over `os.path` | `PTH` |
 | Explicit `encoding=` on reads and writes | `unspecified-encoding` |
@@ -93,190 +102,63 @@ which rest on your own discipline.
 | Hooks are exec form: `command` plus `args`, no shell | *convention — review only* |
 | No literal path separators asserted in tests | *convention — review only* |
 | No edits to repo files while on `main` | `tools/branch_guard.py` via `PreToolUse` |
+| No turn ends with a changed file failing the gate, or a failing test | `tools/stop_gate.py` via `Stop` — blocks once, then lets you stop and explain |
 | No direct commits to `main` (merges allowed) | `no-commit-to-branch` at `pre-commit` stage only |
 | Conventional Commit format, every branch | `conventional-pre-commit` (prek, `commit-msg` stage) |
-| Branch consolidated to one commit before merge | *convention — review only* |
-| `main` receives merge commits, never fast-forwards | *convention — review only* |
-| Merge subject describes the work, never `Merge branch '...'` | *convention — `Merge` is exempt from the message check* |
+| Branch consolidated to one commit before merge | `tools/finish_branch.py`, when the branch is finished with it |
+| `main` receives merge commits, never fast-forwards | `tools/finish_branch.py`, when the branch is finished with it |
+| Merge subject describes the work, never `Merge branch '...'` | `tools/finish_branch.py`, when the branch is finished with it — by hand, review only: `Merge` is exempt from the message check |
 | Clean tree before starting work | *convention — `SessionStart` reports it, does not block* |
+| `prek` installed and all three git shims present | `tools/session_doctor.py` via `SessionStart` — reports, does not block |
 | Commit summary ≤72 chars, imperative | *convention — review only* |
 | One logical change per commit | *convention — review only* |
-| No `class` inside a function | *convention — review only* |
-| Name intermediates; no multi-`for` comprehensions | *convention — review only* |
+| Name intermediates | *convention — review only* |
 | Dataclass over ad-hoc dict | *convention — review only* |
 | Inject clock/rng/client | *convention — review only* |
-| No `getattr` dispatch or metaclass tricks | *convention — review only* |
-| `if __name__ == "__main__":` on runnable modules | *convention — review only* |
+| No metaclass tricks or runtime-generated attributes | *convention — review only* |
+| `if __name__ == "__main__":` on other runnable modules | *convention — review only* |
 
 The convention rows are checked by `/code-review`, not by a linter. They matter just as much.
 
 ## Escape hatch
 
-A genuinely necessary closure that is not returned can carry `# noqa: nested-def` on its `def`
-line. Use it rarely and say why in a comment.
+Each `check_conventions.py` rule has an id, and a line opts out of one with `# noqa: <id>` —
+`# noqa: nested-def` on the `def` line of a closure that genuinely cannot be returned, say. Name
+several ids with commas. Use it rarely and say why in a comment beside it.
 
-## Branching
+## Git
 
-**Never edit on `main`.** Before starting any work, check the branch and the tree:
-
-```bash
-git status --short --branch
-```
-
-- If the tree is dirty, resolve it first — commit it, stash it, or ask. Never start new work on top
-  of someone else's uncommitted changes, because the next commit cannot then be split cleanly.
-- If on `main`, branch before the first edit: `git switch -c <type>/<short-name>`, using the same
-  types as the commit list below (`feat/publicip-retry`, `fix/hook-stderr`, `chore/bump-ruff`).
-
-This is enforced twice, deliberately, because the two catch different mistakes:
-
-| Guard | Fires when | Effect |
-|---|---|---|
-| `PreToolUse` branch guard | `Edit`/`Write` to a file **inside the repo** while on `main` | blocks the edit before it lands |
-| `no-commit-to-branch` | `git commit` on `main` | blocks the commit |
-
-The edit-time guard is the one that matters. Without it, work lands in `main`'s working tree and only
-gets caught at commit, when the fix is a `stash`/`branch`/`pop` dance rather than one command.
-
-*Why: `main` should always be a state you can return to. A dirty `main` working tree means you
-cannot check out anything else without carrying changes along, and you lose the ability to tell what
-was already good from what you are in the middle of.*
-
-**Override**, for a genuine one-line emergency: `touch .allow-main-edit` (gitignored). It disables
-only the edit guard; the commit guard still needs `git commit --no-verify`, which also skips every
-other check. Prefer branching — it costs one command.
-
-## Merging
-
-`main` only ever receives **merge commits** — never a direct commit, never a fast-forward. The merge
-commit is what records that a branch existed and what it was for, so `git log --first-parent main`
-reads as one entry per piece of work while `git log` still has the detail for `bisect`.
-
-Consolidate the branch to a single commit *before* merging. Two paths; prefer the first.
-
-### Squash into a clean branch (default)
-
-```bash
-git switch -c feat/x-wip                  # scratch: commit as often as you like
-# ...work...
-git switch main
-git switch -c feat/x                      # clean branch cut from current main
-git merge --squash feat/x-wip
-git commit -m "feat(x): ..."              # full gate + message check run HERE
-git rebase main                           # resolve conflicts HERE, never on main
-git switch main
-git merge --no-ff -m "feat(x): ..." feat/x   # subject repeats the branch commit's summary
-git branch -D feat/x feat/x-wip
-```
-
-Nothing is rewritten anywhere: `feat/x-wip` sits untouched until you delete it, so a botched
-consolidation costs nothing. And because the consolidation is an ordinary commit on a branch, the
-commit that reaches `main` is exactly the one the full gate inspected.
-
-### Rebase in place (only when the branch holds more than one change)
-
-Squashing forces everything into one commit, which produces exactly the "and" commit the rule below
-forbids when a branch genuinely did two things. Consolidate with autosquash instead:
-
-```bash
-git commit --fixup=HEAD                             # corrections, as you go
-GIT_SEQUENCE_EDITOR=true git rebase --autosquash main
-prek run --all-files                                # REQUIRED — see below
-git switch main && git merge --no-ff --log -m "feat(x): ..." feat/x
-```
-
-**No hooks run during a rebase** — not the gate, not the message check. A rebase that resolved a
-conflict produces a tree nothing has ever checked, so `prek run --all-files` afterwards is not
-optional. For the same reason, never consolidate with an interactive-rebase squash and assume the
-result was verified. It was not.
-
-### The merge message
-
-Always pass `-m`. Git's default subject is `Merge branch 'feat/x'`, which is the one form this repo
-does not use — and also the one form nothing will catch. `commit-msg` *does* fire on
-`git merge --no-ff`, but `conventional-pre-commit` exempts any message beginning with `Merge`, so
-the default sails through while `adds a probe file` is correctly rejected. The convention below is
-therefore review-only in practice, however enforced the rest of the commit rules look.
-
-That is deliberate. The checker's `--strict` flag would close the gap, but it also rejects every
-`fixup!` commit, which the rebase path above depends on. Both merges and fixups stay allowed.
-
-It matters because the merge commit is the only place the work is described. Git records the branch
-name nowhere in the commit — only in the reflog, which is local and expires — so once
-`feat/geo-get-coordinates` is deleted, the merge subject is all that is left.
-
-- **Squash path** (the branch is one commit): the merge subject repeats that commit's conventional
-  summary verbatim. The body carries anything the branch commit does not already say, and nothing
-  otherwise — do not manufacture prose to fill it.
-
-  ```bash
-  git merge --no-ff -m "feat(geo): add coordinate lookup" feat/geo
-  ```
-
-- **Rebase path** (the branch holds several commits): the merge subject summarises the branch as a
-  whole, and `--log` populates the body with the commits that arrived, so the "and" the subject
-  cannot contain lands in the body instead.
-
-  ```bash
-  git merge --no-ff --log -m "feat(geo): add lookup and caching" feat/geo
-  ```
-
-Once there is a remote and PRs exist, add a `Refs: #N` trailer. Footers are part of the Conventional
-Commits spec; branch names are not.
-
-### Never resolve conflicts on `main`
-
-Bring `main` into the branch and resolve there, so the merge into `main` is always clean. This is not
-just hygiene: git runs `pre-commit` rather than `pre-merge-commit` when you commit a *resolved*
-merge, so `no-commit-to-branch` blocks you mid-merge and leaves it half-applied. The `PreToolUse`
-guard stops you editing the conflicted file on `main` in the first place.
-
-### Checkpointing broken work
-
-Scratch commits still use Conventional Commit form — `chore(x): wip` costs nothing and keeps the
-history readable while it exists. But half-written code will not pass `ty`, so skip the *code* gate
-without skipping the *message* check:
-
-```bash
-SKIP=ruff-format,ruff-check,ty,rumdl-fmt,rumdl,no-nested-defs git commit -m "chore(x): wip"
-```
-
-`git commit --no-verify` is the wrong tool here — it skips the message check too. Worth an alias:
-
-```bash
-git config alias.wip '!SKIP=ruff-format,ruff-check,ty,rumdl-fmt,rumdl,no-nested-defs git commit'
-```
-
-## Commits
-
-[Conventional Commits](https://www.conventionalcommits.org/): `type(scope): summary`.
-
-- Types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `build`, `ci`, `perf`, `style`, `revert`.
-- Summary in the imperative, lower case, no trailing period, ≤72 characters.
-- Scope is optional and is a module or area, e.g. `feat(cli): add --json output`.
-- Breaking changes get a `!` before the colon *and* a `BREAKING CHANGE:` footer.
-- Body explains **why**, not what — the diff already says what.
-- One logical change per commit. If the summary needs "and", split it.
-
-*Why: the type prefix is what makes history greppable and changelogs derivable, and it forces
-the "is this one change?" question at the point where it is cheap to fix.*
+- **Never edit on `main`.** Check `git status --short --branch` first. On `main`, branch before the
+  first edit: `git switch -c <type>/<short-name>`, e.g. `feat/fetch-retry`. A dirty tree you did
+  not make: resolve it or ask before starting.
+- **Conventional Commits:** `type(scope): summary` — imperative, lower case, no period, at most 72
+  characters; the body says why. Types: `feat` `fix` `docs` `refactor` `test` `chore` `build` `ci`
+  `perf` `style` `revert`. One logical change per commit: if the summary needs "and", split it.
+- **Finish a branch with the script, never by hand:**
+  `uv run python tools/finish_branch.py "feat(x): summary"`. It squashes, gates, and merges into
+  `main` with `--no-ff`; `--keep-commits` keeps several commits when the branch holds several
+  changes.
+- Checkpointing broken work, a conflict with `main`, the merge message, and the reasons for all of
+  it: the **git-workflow** skill.
 
 ## Commands
 
 ```bash
-ruff format . && ruff check --fix .              # format, then auto-fix
-ty check                                         # types
-rumdl fmt . && rumdl check .                     # markdown
-uv run pytest                                    # tests
-uv run python tools/check_nested_defs.py src tests tools
-prek run --all-files                             # everything above, as one gate
+prek run --files <path> [<path> ...]    # the whole gate, on the files you touched
+prek run ty --all-files                 # one hook by id: ruff-check, ty, rumdl, conventions
+prek run --all-files                    # the whole gate, every tracked file
+uv run pytest                           # tests, which the gate does not run
 ```
+
+Run the linters **through prek, never directly.** `ty` is not installed outside the gate, so
+`ty check` is "command not found", and a `ruff` on PATH can be a different version from the hook's
+pin and disagree with it. prek runs the pinned versions, so what passes here passes at commit.
 
 First-time setup needs **all three** shims. `prek install` alone wires only `pre-commit`, which
 silently disables the commit-message check *and* makes `git merge --no-ff` into `main` fail:
 
 ```bash
-prek install && prek install -t commit-msg && prek install -t pre-merge-commit
+prek install -t pre-commit -t commit-msg -t pre-merge-commit
 ```
 
 Add dependencies with `uv add` / `uv add --dev`, never by editing `pyproject.toml` by hand.

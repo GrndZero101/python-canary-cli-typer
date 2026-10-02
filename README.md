@@ -14,10 +14,18 @@ by lint config and a `prek` gate — not just documented and hoped for.
   placeholder command, `about`. Replace it or build beside it; the plumbing around it — settings,
   output, logging, the entry point — is meant to stay. Built beside it: `weather`, which looks up
   current conditions from wttr.in over httpx, offline-tested via `httpx.MockTransport`.
-- **`tools/`** — the custom checks no off-the-shelf linter covers: `check_nested_defs.py` (no
-  `def` inside a `def`), `branch_guard.py` and `gate.py` (the `PreToolUse`/`PostToolUse` hooks that
-  block edits to `main` and run the lint gate on save), `hook_payload.py` (shared parsing), and
-  `debug_pytest.py` (lets the DebugMCP CLI debug a test file; see below).
+- **`tools/`** — the custom checks no off-the-shelf linter covers: `check_conventions.py` and
+  `convention_rules.py` (the CLAUDE.md conventions no linter checks: `def` or `class` inside a
+  function, complex comprehensions, `raise ... from None`, computed `getattr`, an unguarded
+  `main`), `branch_guard.py` and `gate.py` (the `PreToolUse`/`PostToolUse` hooks that
+  block edits to `main` and run the lint gate on save), `stop_gate.py` (the `Stop` hook that
+  re-checks every changed file and runs the tests before a turn ends), `gate_log.py` (one line per
+  gate run in the gitignored `.gate.log`), `session_doctor.py` (the `SessionStart` hook that
+  reports the branch, and any guard switched off by a missing `prek` or git shim),
+  `finish_branch.py` (consolidates, gates and merges a finished branch into `main`; see the
+  `git-workflow` skill), `hook_payload.py` (shared parsing), and
+  `debug_module.py` and `debug_pytest.py` (let the DebugMCP CLI debug a source module and a test
+  file; see below).
 - **`.claude/skills/`** — the conventions for this stack, loaded by an agent when they apply.
 - **`.debugmcp.json`** — debugger adapters for an agent driving [DebugMCP](https://github.com/microsoft/DebugMCP).
 - **`CLAUDE.md`** — the full rule set: structure, debuggability, agent-friendliness, portability,
@@ -29,7 +37,7 @@ The template's generation tasks already ran these. Repeat them only on a fresh c
 
 ```bash
 uv sync
-prek install && prek install -t commit-msg && prek install -t pre-merge-commit
+prek install -t pre-commit -t commit-msg -t pre-merge-commit
 ```
 
 All three shims are required — `prek install` alone wires only `pre-commit`, which silently skips
@@ -43,23 +51,25 @@ needs Node. It needs Node 20+:
 
 ```bash
 npm install --global debugmcp
-claude mcp add --scope user debugmcp -- debugmcp serve --stdio
+claude mcp add --scope user debugmcp-cli -- debugmcp serve --stdio
 ```
 
-On native Windows, use `-- cmd /c debugmcp serve --stdio`. Prefer this to `debugmcp configure`,
-which also installs a skill written for the VS Code extension. The `python-debug` skill covers
-using it.
+On native Windows, use `-- cmd /c debugmcp serve --stdio`. The name is `debugmcp-cli` because the
+VS Code extension takes `debugmcp`. Prefer this to `debugmcp configure`, which also installs a
+skill written for the VS Code extension. The `python-debug` skill covers using it.
 
 ## Commands
 
 ```bash
-ruff format . && ruff check --fix .              # format, then auto-fix
-ty check                                         # types
-rumdl fmt . && rumdl check .                     # markdown
-uv run pytest                                    # tests
-uv run python tools/check_nested_defs.py src tests tools
-prek run --all-files                             # everything above, as one gate
+prek run --files <path> [<path> ...]    # the whole gate, on the files you touched
+prek run ty --all-files                 # one hook by id: ruff-check, ty, rumdl, conventions
+prek run --all-files                    # the whole gate, every tracked file
+uv run pytest                           # tests, which the gate does not run
 ```
+
+Run the linters **through prek, never directly.** `ty` is not installed outside the gate, so
+`ty check` is "command not found", and a `ruff` on PATH can be a different version from the hook's
+pin and disagree with it. prek runs the pinned versions, so what passes here passes at commit.
 
 ## Using the CLI
 
@@ -90,10 +100,13 @@ _TDF_CLI_COMPLETE=source_zsh tdf-cli > "${ZDOTDIR:-$HOME}/completions/_tdf-cli"
 ## Updating from the template
 
 ```bash
-copier update
+copier update --trust
 ```
 
 Requires a clean tree and the `.copier-answers.yml` written at generation. Do not delete that file.
+`--trust` is required because the template declares `_tasks`. They run on the first copy only, but
+copier asks for the flag anyway and exits 4 without it. Run it in your own terminal, not through
+an agent: it is the flag an agent's permission classifier refuses.
 
 ## License
 

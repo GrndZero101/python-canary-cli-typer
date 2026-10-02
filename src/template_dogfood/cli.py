@@ -6,21 +6,13 @@
     tdf-cli weather cleve
 
 `about` is a placeholder. Add a command by writing it in its own module as a plain function and
-registering it here by reference, not with its own nested `typer.Typer`. That keeps
-`tdf-cli <command>` two words instead of three, and keeps the function importable and
-callable on its own — from a test, from pdb, or from a debugger's evaluate-expression prompt.
-
-The script is deliberately not called `cli`. On Windows, `cli` is a read-only PowerShell alias
-for `Clear-Item`, and an alias beats an executable on PATH — so a command by that name is
-unreachable from the shell most Windows users are in.
-
-`add_completion=False` is deliberate. Typer's `--install-completion` rewrites `~/.zshrc` with
-no backup, never consults `$ZDOTDIR`, and appends an unconditional `compinit`. Emit the script
-instead and let the user or packager place it:
+registering it here by reference, beside `about` — "Recipe: add a command" in the
+python-cli-modern skill. Shell completion is emitted rather than installed:
 
     _TDF_CLI_COMPLETE=source_zsh tdf-cli > "${ZDOTDIR:-$HOME}/completions/_tdf-cli"
 
-Note `source_zsh`, not `zsh_source` — typer inverts Click 8's order for backwards compatibility.
+Why `add_completion=False`: .claude/skills/python-cli-modern/reference/completion.md.
+Why the script is never `cli`: .claude/skills/python-cli-modern/reference/typer.md.
 """
 
 import sys
