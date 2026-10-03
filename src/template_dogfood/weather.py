@@ -18,6 +18,7 @@ from pydantic import BaseModel
 from rich.table import Table
 
 from .config import load_settings
+from .http_client import build_client
 from .options import OutputOption, global_options
 from .output import OutputFormat, out
 
@@ -50,17 +51,9 @@ def _parse_weather_report(location: str, payload: dict[str, Any]) -> WeatherRepo
     )
 
 
-def _request_weather(
-    client: httpx.Client,
-    location: str,
-    timeout: float,
-) -> WeatherReport:
-    """Fetch and parse the current conditions using an already-open client."""
-    response = client.get(
-        f"{WTTR_URL}/{quote(location)}",
-        params={"format": "j1"},
-        timeout=timeout,
-    )
+def fetch_weather(location: str, client: httpx.Client) -> WeatherReport:
+    """Return the current conditions for `location`, fetched with `client`."""
+    response = client.get(f"{WTTR_URL}/{quote(location)}", params={"format": "j1"})
     response.raise_for_status()
     try:
         payload = response.json()
@@ -68,22 +61,6 @@ def _request_weather(
         msg = f"no weather data found for {location!r}"
         raise ValueError(msg) from exc
     return _parse_weather_report(location, payload)
-
-
-def fetch_weather(
-    location: str,
-    timeout: float = DEFAULT_TIMEOUT_SECONDS,
-    client: httpx.Client | None = None,
-) -> WeatherReport:
-    """Return the current conditions for `location`.
-
-    Pass `client` to reuse a connection or to substitute a transport in tests; when
-    omitted, a client is opened and closed around the single request.
-    """
-    if client is not None:
-        return _request_weather(client, location, timeout)
-    with httpx.Client() as owned_client:
-        return _request_weather(owned_client, location, timeout)
 
 
 def render_weather_json(report: WeatherReport) -> str:
@@ -128,9 +105,11 @@ def weather(
     query = " ".join(location)
     logger.debug("querying wttr.in for {!r}", query)
     try:
-        report = fetch_weather(query, timeout=timeout)
+        with build_client(timeout=httpx.Timeout(timeout)) as client:
+            report = fetch_weather(query, client)
     except httpx.HTTPError as exc:
-        logger.exception("could not reach {}", WTTR_URL)
+        logger.opt(exception=exc).debug("request to {} failed", WTTR_URL)
+        logger.error("could not reach {}: {}", WTTR_URL, exc)
         raise typer.Exit(1) from exc
     except ValueError as exc:
         logger.error(str(exc))

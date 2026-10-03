@@ -26,7 +26,9 @@ a command that calls an API, start from `reference/status.py` instead — the ne
    - a renderer: a rich table for `table`, `sys.stdout.write` of JSON for `json`;
    - `<name>_command(ctx: typer.Context, ..., output: OutputOption = None) -> None`, which calls
      `load_settings(verbose=global_options(ctx).verbose, output=output)`, delegates, and raises
-     `typer.Exit(1)` on a runtime failure. Nothing else.
+     `typer.Exit(1)` on a runtime failure. Nothing else. A positional argument is
+     `names: Annotated[list[str], typer.Argument(help="...")]`, with no default; one that must be
+     validated or is not a string: "Recipe: a validated argument".
 2. **Register it in `src/<package>/cli.py`**, beside `about`:
 
    ```python
@@ -55,13 +57,44 @@ cp .claude/skills/python-cli-modern/reference/test_status.py tests/
 
 They pass the gate and their tests exactly as copied (a generation test proves it). Then rename
 `status` to your command and register it as in the first recipe. `build_client()` gives per-phase
-timeouts, a User-Agent, retries on 429 and 5xx honouring `Retry-After`, and a debug line per
-request. Tests replace the network with `httpx.MockTransport`; `test_status.py` shows both ways —
-passing a client to a function, and replacing `build_client` for a test through `main`.
+timeouts, a User-Agent, retries on 429 and 5xx honouring `Retry-After`, `HTTPS_PROXY` and
+`NO_PROXY`, and a debug line per request. An API with a rate policy needs the first retry no
+sooner than it allows: `build_client(backoff=1.0)` for one request per second, or `attempts=1` to
+never retry. Tests replace the network with `httpx.MockTransport`;
+`test_status.py` shows both ways — passing a client to a function, and replacing `build_client`
+for a test through `main`.
+
+**Mock what the service really returns.** Before writing a test for a failure — an unknown id, a
+bad parameter — provoke it once against the real service (`curl -s -w ' [%{http_code}]\n' URL`)
+and mock that status and body. Docs and specs are often wrong about failures: an "absent" key can
+be a 404, and the command must handle the one that actually arrives.
 
 Prefer a credible vendor SDK (`boto3`, `google-cloud-*`, `azure-*`, `PyGithub`, `kubernetes`) when
 one covers the service: it already handles auth refresh, pagination and retries. Either way, the
 client is a parameter with a default, never a module-level singleton.
+
+## Recipe: a validated argument
+
+For any value that is not a plain `str`, `int` or `Path` — an amount, a `BASE/QUOTE` pair, a URL —
+parse it in a function typer calls, so a bad value is typer's own usage error (exit 2, "Invalid
+value for 'AMOUNT': ...") before the command body runs. `reference/status.py` has `parse_url`.
+
+1. **Write `parse_<thing>(raw: str) -> <Type>`** in the command's module. It returns the parsed
+   value or raises `typer.BadParameter` naming the value and the expected form; for a `Decimal`,
+   `raise typer.BadParameter(msg) from exc` on `InvalidOperation`.
+2. **Declare it**, typed as what the parser returns, with a metavar for the help:
+
+   ```python
+   amount: Annotated[Decimal, typer.Argument(parser=parse_amount, metavar="AMOUNT")]
+   margin: Annotated[Decimal, typer.Option("--margin", "-m", parser=parse_amount)] = Decimal(0)
+   ```
+
+3. **Test both halves**, as `test_status.py` does: the parser directly, with each malformed form
+   (`pytest.raises(typer.BadParameter)`), and one bad value through `main`, asserting exit 2,
+   empty stdout and the value named on stderr.
+
+Never check the value in the command body and raise `typer.Exit(2)` by hand: typer then prints no
+usage line, and the message format differs from every other usage error.
 
 ## Recipe: add a setting
 
@@ -92,6 +125,9 @@ defaults to `None` and typer's `envvar=` is not used: `reference/configuration.m
   captured stderr; `caplog` sees nothing. `reference/logging.md`.
 - **`main` returns an exit code** through `run_app`; never `sys.exit` below the `__main__` block,
   and never `import click` — typer 0.27 vendors it. `reference/typer.md`.
+- **A runtime failure names its cause.** In the `except` that exits, put the exception in the
+  stderr message and log it, as `status.py` does: `logger.opt(exception=exc).debug(...)`, then
+  `raise typer.Exit(1) from exc`. typer never prints an exit's cause, so `from exc` alone hides it.
 - **pydantic `BaseModel` at the edges** (API responses, output shapes), dataclasses inside.
   `reference/models.md`.
 
