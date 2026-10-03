@@ -1,9 +1,10 @@
 """Check the conventions in CLAUDE.md that no linter in the Astral stack covers.
 
 Ruff, ty and pylint between them have no rule for a `def` or `class` inside a function, a
-comprehension with two `for` clauses, `raise ... from None`, `getattr` with a computed name, or a
-`main` that cannot be run. These are the rules CLAUDE.md states and a weaker model forgets, so they
-are checked rather than trusted. The rules themselves, their ids and the opt-out comment are in
+comprehension with two `for` clauses, `raise ... from None`, `getattr` with a computed name, a
+`main` that cannot be run, an exit that drops the exception it caught, an HTTP client built, or
+patched, anywhere but its factory, or a typer parameter declared in its default. These are the rules CLAUDE.md states and a weaker model forgets,
+so they are checked rather than trusted. The rules themselves, their ids and the opt-out comment are in
 `convention_rules.py`.
 
 Usage:
@@ -35,12 +36,36 @@ def check_file(path: Path) -> list[Finding]:
     return check_source(path, path.read_text(encoding="utf-8"))
 
 
+def _location(finding: Finding) -> str:
+    """Return `path:line: rule:`, followed by what is particular to this finding, if anything."""
+    head = f"{finding.path}:{finding.line}: {finding.rule}:"
+    return f"{head} {finding.detail}" if finding.detail else head
+
+
 def format_finding(finding: Finding) -> str:
     """Render a finding as its location, rule id and a message that states the fix."""
     return (
-        f"{finding.path}:{finding.line}: {finding.rule}: {finding.message}\n"
+        f"{_location(finding)} {finding.message}\n"
         f"  If it is genuinely needed, add `# noqa: {finding.rule}` to that line and say why."
     )
+
+
+def format_findings(findings: list[Finding]) -> list[str]:
+    """Render each finding, giving a message already shown only its location.
+
+    One habit — patching httpx in every test, say — can trip a rule twenty times, and the agent
+    reads the whole report: the twentieth copy of a message costs tokens and says nothing new.
+    """
+    shown: set[tuple[str, str]] = set()
+    rendered: list[str] = []
+    for finding in findings:
+        key = (finding.rule, finding.message)
+        if key in shown:
+            rendered.append(f"{_location(finding)} (fix as above)")
+            continue
+        shown.add(key)
+        rendered.append(format_finding(finding))
+    return rendered
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -62,8 +87,8 @@ def main(argv: list[str] | None = None) -> int:
     count = len(findings)
     plural = "" if count == 1 else "s"
     print(f"Found {count} convention violation{plural}.\n", file=sys.stderr)
-    for finding in findings:
-        print(format_finding(finding), file=sys.stderr)
+    for line in format_findings(findings):
+        print(line, file=sys.stderr)
     return 1
 
 

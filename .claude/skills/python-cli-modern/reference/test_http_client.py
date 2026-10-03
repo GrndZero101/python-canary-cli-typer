@@ -1,4 +1,4 @@
-"""Tests for the reference httpx client: retries, Retry-After, timeouts and the User-Agent.
+"""Tests for the reference httpx client: retries, Retry-After, timeouts, User-Agent and proxies.
 
 Every response comes from an `httpx.MockTransport`, and `sleep` is a recorder, so nothing touches
 the network and nothing waits.
@@ -14,6 +14,7 @@ from template_dogfood.http_client import (
     MAX_ATTEMPTS,
     build_client,
     parse_retry_after,
+    proxy_for,
 )
 
 NOW = datetime(2026, 10, 2, 12, 0, tzinfo=UTC)
@@ -43,6 +44,17 @@ def test_a_503_is_retried_with_backoff_until_it_succeeds() -> None:
     assert response.status_code == 200
     assert len(seen) == 3
     assert waits == [0.5, 1.0]
+
+
+def test_backoff_sets_the_first_wait_for_a_rate_limited_api() -> None:
+    """One request per second, say: no retry may follow sooner than that."""
+    waits: list[float] = []
+    responses = [httpx.Response(503), httpx.Response(503), httpx.Response(200)]
+    handler = functools.partial(_replay, responses, [])
+    transport = httpx.MockTransport(handler)
+    with build_client(transport=transport, backoff=1.0, sleep=waits.append) as client:
+        client.get("https://api.example.test/items")
+    assert waits == [1.0, 2.0]
 
 
 def test_retry_after_in_seconds_is_obeyed() -> None:
@@ -96,3 +108,30 @@ def test_timeouts_are_set_per_phase() -> None:
     with _client([], [], []) as client:
         assert client.timeout.connect == 3.0
         assert client.timeout.read == 10.0
+
+
+PROXIES = {"https": "http://proxy.example.test:3128", "no": "localhost,.internal.example.test"}
+
+
+def test_a_request_goes_through_the_proxy_for_its_scheme() -> None:
+    url = httpx.URL("https://api.example.test/items")
+    assert proxy_for(url, PROXIES) == "http://proxy.example.test:3128"
+
+
+def test_a_host_in_no_proxy_connects_directly() -> None:
+    assert proxy_for(httpx.URL("https://svc.internal.example.test/"), PROXIES) is None
+    assert proxy_for(httpx.URL("https://localhost:8443/"), PROXIES) is None
+
+
+def test_a_scheme_with_no_proxy_set_connects_directly() -> None:
+    assert proxy_for(httpx.URL("http://api.example.test/"), PROXIES) is None
+
+
+def test_all_proxy_covers_every_scheme_and_a_bare_host_gets_a_scheme() -> None:
+    assert proxy_for(httpx.URL("http://api.example.test/"), {"all": "proxy:8080"}) == (
+        "http://proxy:8080"
+    )
+
+
+def test_no_proxy_star_turns_proxies_off() -> None:
+    assert proxy_for(httpx.URL("https://api.example.test/"), {**PROXIES, "no": "*"}) is None

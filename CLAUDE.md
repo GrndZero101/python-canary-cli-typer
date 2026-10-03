@@ -1,8 +1,9 @@
 # Python rules
 
 Enforced by a PostToolUse hook that auto-formats, then blocks on anything left. Violations block
-the edit — fix them, don't work around them. A Stop hook checks every changed file again, and runs
-the tests, before a turn can end, so a file changed by `sed` or a heredoc is caught too.
+the edit — fix them, don't work around them. A Stop hook checks every file the branch has changed
+again, and runs the tests, before a turn can end, so a file changed by `sed` or a heredoc, or
+already committed, is caught too.
 
 ## Structure
 
@@ -30,17 +31,21 @@ Every rule here exists so a human can stop the program and inspect it.
 - No lambda beyond a trivial attribute or index access.
   *Why: it shows as `<lambda>` in stack traces with no source context.*
 - Inject dependencies — clock, rng, HTTP client, paths — as parameters with defaults. Never reach
-  for module-level mutable state.
+  for module-level mutable state. The one sanctioned patch: a command's end-to-end test through
+  `main` replaces `<module>.build_client` with `monkeypatch.setattr`, since the command builds it.
   *Why: a function must be re-runnable in isolation from a breakpoint, with values you choose.*
 - Never swallow an exception. `raise ... from e`, or `logger.exception(...)` — never
-  `raise ... from None`, which discards the cause just as surely.
+  `raise ... from None`, which discards the cause just as surely. That includes an exit:
+  `raise typer.Exit(1) from e` on its own still swallows `e`, because nothing prints an exit's
+  cause. Name `e` in the error message and log it too.
   *Why: a bare `except: pass` destroys the traceback that tells you where it started.*
 - Diagnostics go to a configured logger writing to **stderr**; data goes out with
   `sys.stdout.write`. Never `print`, not even in a `__main__` block. Stdlib `logging` by default;
   `loguru` where a stack skill says so.
   *Why: stdout is reserved for a command's data, so it stays pipeable. Diagnostics that land there
   corrupt the output a caller is parsing.*
-- Every module that can run standalone gets `if __name__ == "__main__":`.
+- Every module that can run standalone gets `if __name__ == "__main__":`. A command module reached
+  only through `cli.py` has no entry point of its own, and needs none.
 
 ## Agent-friendliness
 
@@ -90,6 +95,10 @@ which rest on your own discipline.
 | Never `raise ... from None` | `tools/check_conventions.py` `raise-from-none` — `B904` accepts it |
 | No `getattr`/`setattr`/`delattr` with a computed name | `tools/check_conventions.py` `dynamic-attribute` |
 | A module defining `main` has an `if __name__ == "__main__":` block | `tools/check_conventions.py` `missing-main-guard` |
+| An exit from an `except` reports what it caught | `tools/check_conventions.py` `silent-exit` |
+| An HTTP client comes from `build_client`, never a bare `httpx.Client()` | `tools/check_conventions.py` `raw-httpx-client` |
+| Tests replace the network with `httpx.MockTransport`, never by patching httpx | `tools/check_conventions.py` `patched-httpx` |
+| typer parameters use `Annotated`, never `= typer.Option(...)` | `tools/check_conventions.py` `typer-default` |
 | Full annotations on public signatures | `ANN` + `ty` |
 | Docstrings on public functions/classes | `D101` `D102` `D103` |
 | No lambda assigned to a name | `E731` |
@@ -135,8 +144,8 @@ several ids with commas. Use it rarely and say why in a comment beside it.
   characters; the body says why. Types: `feat` `fix` `docs` `refactor` `test` `chore` `build` `ci`
   `perf` `style` `revert`. One logical change per commit: if the summary needs "and", split it.
 - **Finish a branch with the script, never by hand:**
-  `uv run python tools/finish_branch.py "feat(x): summary"`. It squashes, gates, and merges into
-  `main` with `--no-ff`; `--keep-commits` keeps several commits when the branch holds several
+  `uv run python tools/finish_branch.py "feat(x): summary"`. It squashes, gates, tests, and merges
+  into `main` with `--no-ff`; `--keep-commits` keeps several commits when the branch holds several
   changes.
 - Checkpointing broken work, a conflict with `main`, the merge message, and the reasons for all of
   it: the **git-workflow** skill.

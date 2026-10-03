@@ -1,7 +1,8 @@
 """The rules behind `check_conventions.py`: CLAUDE.md conventions that no Astral linter checks.
 
 Each rule is a function from a parsed module to `Hit`s, and each hit's message names the fix, not
-just the violation. A line opts out of one rule with `# noqa: <rule-id>` — several ids may be
+just the violation. What is particular to one hit — the names involved — goes in its `detail`, so
+the advice itself is identical across hits and the report can print it once. A line opts out of one rule with `# noqa: <rule-id>` — several ids may be
 listed, separated by commas — and the comment beside it should say why.
 
 | Rule id | Flags |
@@ -12,13 +13,18 @@ listed, separated by commas — and the comment beside it should say why.
 | `raise-from-none` | `raise ... from None` |
 | `dynamic-attribute` | `getattr`, `setattr` or `delattr` with a computed attribute name |
 | `missing-main-guard` | a module that defines `main` with no `if __name__ == "__main__":` |
+| `raw-httpx-client` | an httpx client, or an `httpx.get`-style call, built outside `build_client` |
+| `patched-httpx` | `patch`, `patch.object` or `setattr` aimed at httpx itself |
+| `silent-exit` | an exit raised from an `except` that never reports the exception it caught |
+| `typer-default` | `typer.Option(...)` or `typer.Argument(...)` as a parameter's default |
 """
 
 import ast
 import dataclasses
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
+from typing import TypeGuard
 
 FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef
 COMPREHENSIONS = (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
@@ -26,6 +32,23 @@ DYNAMIC_ATTRIBUTE_CALLS = frozenset({"getattr", "setattr", "delattr"})
 ATTRIBUTE_NAME_ARG = 1  # getattr(obj, name, ...): the name is the second positional argument
 NOQA_MARK = "# noqa:"
 NOQA_SEPARATORS = re.compile(r"[,\s]+")
+HTTPX_CLIENTS = frozenset({"Client", "AsyncClient"})
+# httpx's module-level shortcuts, each of which builds a throwaway client with the defaults.
+HTTPX_SHORTCUTS = frozenset({
+    "get",
+    "post",
+    "put",
+    "patch",
+    "delete",
+    "head",
+    "options",
+    "request",
+    "stream",
+})
+CLIENT_FACTORY = "build_client"
+PATCHERS = frozenset({"patch", "object", "setattr"})
+EXIT_EXCEPTIONS = frozenset({"Exit", "Abort", "SystemExit"})
+TYPER_PARAMETERS = frozenset({"Option", "Argument"})
 
 
 @dataclasses.dataclass(frozen=True)
@@ -35,6 +58,7 @@ class Hit:
     line: int
     rule: str
     message: str
+    detail: str = ""
 
 
 @dataclasses.dataclass(frozen=True)
@@ -45,6 +69,7 @@ class Finding:
     line: int
     rule: str
     message: str
+    detail: str = ""
 
 
 def _returned_names(func: FunctionNode) -> set[str]:
@@ -64,21 +89,24 @@ def _nested_def_hit(child: FunctionNode, enclosing: FunctionNode) -> Hit | None:
     if child.name in _returned_names(enclosing):
         return None
     message = (
-        f"`{child.name}` is defined inside `{enclosing.name}`. Move it to module level and pass "
-        "what it needs as arguments: a nested def cannot be breakpointed by name or called from "
-        "pdb, and its closure is invisible in the debugger. If the closure is the point, return "
-        f"it from `{enclosing.name}` (the decorator or factory pattern)."
+        "Move it to module level and pass what it needs as arguments; where it is handed over as "
+        "a callback, bind those arguments with `functools.partial(helper, value)`. A nested def "
+        "cannot be breakpointed by name or called from pdb, and its closure is invisible in the "
+        "debugger. Return a nested def only from a decorator or factory whose whole job is the "
+        "closure; a test handler is neither."
     )
-    return Hit(child.lineno, "nested-def", message)
+    detail = f"`{child.name}` is defined inside `{enclosing.name}`."
+    return Hit(child.lineno, "nested-def", message, detail)
 
 
 def _nested_class_hit(child: ast.ClassDef, enclosing: FunctionNode) -> Hit:
     """Return the hit for a class defined inside a function."""
     message = (
-        f"class `{child.name}` is defined inside `{enclosing.name}`. Move it to module level: a "
-        "class built per call is a new type each time, which breaks `isinstance` and pickling."
+        "Move it to module level: a class built per call is a new type each time, which breaks "
+        "`isinstance` and pickling."
     )
-    return Hit(child.lineno, "nested-class", message)
+    detail = f"class `{child.name}` is defined inside `{enclosing.name}`."
+    return Hit(child.lineno, "nested-class", message, detail)
 
 
 class _ScopeScanner:
@@ -144,10 +172,11 @@ def comprehension_hits(tree: ast.Module) -> list[Hit]:
             pending.extend(ast.iter_child_nodes(node))
             continue
         message = (
-            f"{problem}. Write an explicit loop with named intermediates, so a breakpoint inside "
-            "it has values to inspect."
+            "Write an explicit loop with named intermediates, so a breakpoint inside it has "
+            "values to inspect."
         )
-        hits.append(Hit(getattr(node, "lineno", 0), "complex-comprehension", message))
+        line = getattr(node, "lineno", 0)
+        hits.append(Hit(line, "complex-comprehension", message, f"{problem}."))
     return hits
 
 
@@ -186,11 +215,11 @@ def attribute_hits(tree: ast.Module) -> list[Hit]:
         if builtin is None:
             continue
         message = (
-            f"`{builtin}` with a computed attribute name. Name the attribute in the code, or "
-            "dispatch through an explicit dict of functions: grep and breakpoints cannot follow "
-            "a name built at runtime."
+            "Name the attribute in the code, or dispatch through an explicit dict of functions: "
+            "grep and breakpoints cannot follow a name built at runtime."
         )
-        hits.append(Hit(getattr(node, "lineno", 0), "dynamic-attribute", message))
+        detail = f"`{builtin}` with a computed attribute name."
+        hits.append(Hit(getattr(node, "lineno", 0), "dynamic-attribute", message, detail))
     return hits
 
 
@@ -219,12 +248,232 @@ def main_guard_hits(tree: ast.Module) -> list[Hit]:
     return [Hit(main_def.lineno, "missing-main-guard", message)]
 
 
+@dataclasses.dataclass(frozen=True)
+class ImportedNames:
+    """How a module refers to another: the names bound to that module, and to its members."""
+
+    modules: frozenset[str]
+    members: dict[str, str]  # local name -> the attribute it was imported as
+
+
+def imported_names(tree: ast.Module, module: str) -> ImportedNames:
+    """Collect `import httpx [as h]` and `from httpx import Client [as C]` bindings of `module`."""
+    modules: set[str] = set()
+    members: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            aliases = [alias for alias in node.names if alias.name == module]
+            modules.update(alias.asname or module for alias in aliases)
+        elif isinstance(node, ast.ImportFrom) and node.module == module:
+            members.update({alias.asname or alias.name: alias.name for alias in node.names})
+    return ImportedNames(frozenset(modules), members)
+
+
+def _module_attribute(node: ast.expr, names: ImportedNames) -> str | None:
+    """Return the attribute `node` names, as `httpx.Client` or an imported `Client`."""
+    if isinstance(node, ast.Name):
+        return names.members.get(node.id)
+    if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
+        return node.attr if node.value.id in names.modules else None
+    return None
+
+
+def _rooted_in_httpx(node: ast.expr, names: ImportedNames) -> bool:
+    """Return whether `node` is httpx or something reached from it, e.g. `httpx.Client.get`."""
+    root = node
+    while isinstance(root, ast.Attribute):
+        root = root.value
+    if not isinstance(root, ast.Name):
+        return False
+    return root.id in names.modules or root.id in names.members
+
+
+def _calls_outside(tree: ast.Module, factory: str) -> Iterator[ast.Call]:
+    """Yield every call in `tree` that is not inside a function named `factory`."""
+    pending: list[ast.AST] = [tree]
+    while pending:
+        node = pending.pop()
+        if isinstance(node, FunctionNode) and node.name == factory:
+            continue
+        if isinstance(node, ast.Call):
+            yield node
+        pending.extend(ast.iter_child_nodes(node))
+
+
+def _real_client(call: ast.Call, names: ImportedNames) -> str | None:
+    """Return what `call` builds if it is an httpx client that would reach the network.
+
+    A client given `transport=` is a test double — `MockTransport`, `ASGITransport` — so it
+    passes, as does one given `**kwargs`, where the transport cannot be seen.
+    """
+    attribute = _module_attribute(call.func, names)
+    if attribute in HTTPX_SHORTCUTS:
+        return f"httpx.{attribute}()"
+    if attribute not in HTTPX_CLIENTS:
+        return None
+    keywords = {keyword.arg for keyword in call.keywords}
+    if "transport" in keywords or None in keywords:
+        return None
+    return f"httpx.{attribute}()"
+
+
+def client_hits(tree: ast.Module) -> list[Hit]:
+    """Return `raw-httpx-client` hits: clients built anywhere but `build_client`."""
+    names = imported_names(tree, "httpx")
+    if not names.modules and not names.members:
+        return []
+    hits: list[Hit] = []
+    for call in _calls_outside(tree, CLIENT_FACTORY):
+        built = _real_client(call, names)
+        if built is None:
+            continue
+        message = (
+            f"`{built}` builds a client with no retries, no User-Agent and default timeouts. "
+            f"Call `{CLIENT_FACTORY}()` from `http_client.py` in the command, and pass the client "
+            "down. No `http_client.py` yet? Copy it and its test from "
+            "`.claude/skills/python-cli-modern/reference/` — the python-cli-modern skill, "
+            '"Recipe: call an HTTP API".'
+        )
+        hits.append(Hit(call.lineno, "raw-httpx-client", message))
+    return hits
+
+
+def _called_name(func: ast.expr) -> str | None:
+    """Return the last name in `func`: `patch`, `object` in `mock.patch.object`, `Exit`."""
+    if isinstance(func, ast.Attribute):
+        return func.attr
+    if isinstance(func, ast.Name):
+        return func.id
+    return None
+
+
+def _patches_httpx(call: ast.Call, names: ImportedNames) -> bool:
+    """Return whether `call` patches httpx itself, by object or by dotted string."""
+    if _called_name(call.func) not in PATCHERS or not call.args:
+        return False
+    target = call.args[0]
+    if isinstance(target, ast.Constant) and isinstance(target.value, str):
+        return target.value.split(".")[0] == "httpx"
+    return _rooted_in_httpx(target, names)
+
+
+def patch_hits(tree: ast.Module) -> list[Hit]:
+    """Return `patched-httpx` hits."""
+    names = imported_names(tree, "httpx")
+    message = (
+        "this patches httpx itself, for every caller at once, and hides what the code under test "
+        "sends. Give it a client built with `transport=httpx.MockTransport(handler)` instead: "
+        "pass one to the function, or replace the command module's `build_client` for a test "
+        "through `main`. `.claude/skills/python-cli-modern/reference/test_status.py` shows both."
+    )
+    calls = [node for node in ast.walk(tree) if isinstance(node, ast.Call)]
+    patches = [call for call in calls if _patches_httpx(call, names)]
+    return [Hit(call.lineno, "patched-httpx", message) for call in patches]
+
+
+def _raises_exit(node: ast.AST) -> TypeGuard[ast.Raise]:
+    """Return whether `node` raises `typer.Exit`, `typer.Abort` or `SystemExit`."""
+    if not isinstance(node, ast.Raise) or node.exc is None:
+        return False
+    raised = node.exc.func if isinstance(node.exc, ast.Call) else node.exc
+    return _called_name(raised) in EXIT_EXCEPTIONS
+
+
+def _reports(handler: ast.ExceptHandler) -> bool:
+    """Return whether the handler passes on the exception it caught, whole.
+
+    `f"{exc}"`, `str(exc)` and `logger.opt(exception=exc)` count; `from exc` does not, since
+    nothing prints an exit's cause, and nor does `exc.request`, which reports a part and drops
+    the reason.
+    """
+    if handler.name is None:
+        return False
+    hidden: set[int] = set()  # ids of uses that do not carry the exception anywhere visible
+    for node in ast.walk(handler):
+        if isinstance(node, ast.Raise) and node.cause is not None:
+            hidden.add(id(node.cause))
+        elif isinstance(node, ast.Attribute):
+            hidden.add(id(node.value))
+    for node in ast.walk(handler):
+        if isinstance(node, ast.Name) and node.id == handler.name and id(node) not in hidden:
+            return True
+    return False
+
+
+def _is_interrupt(handler: ast.ExceptHandler) -> bool:
+    """Return whether the handler catches only Ctrl-C, whose cause the user already knows."""
+    return isinstance(handler.type, ast.Name) and handler.type.id == "KeyboardInterrupt"
+
+
+def exit_hits(tree: ast.Module) -> list[Hit]:
+    """Return `silent-exit` hits: an exit from an `except` that drops what it caught."""
+    hits: list[Hit] = []
+    reported: set[int] = set()  # a raise inside nested handlers is reported once, by the outer
+    for handler in ast.walk(tree):
+        if not isinstance(handler, ast.ExceptHandler) or _is_interrupt(handler):
+            continue
+        if _reports(handler):
+            continue
+        message = (
+            "This exit drops the exception it caught: typer never prints an exit's cause, so the "
+            "user sees no reason and `-v` shows nothing. Bind it (`except ... as exc`), put the "
+            "whole of it in the stderr message (`{exc}`) and log it with "
+            '`logger.opt(exception=exc).debug("...")` before exiting.'
+        )
+        exits = [node for node in ast.walk(handler) if _raises_exit(node)]
+        for exit_raise in exits:
+            if id(exit_raise) not in reported:
+                reported.add(id(exit_raise))
+                hits.append(Hit(exit_raise.lineno, "silent-exit", message))
+    return hits
+
+
+def _defaulted_parameters(func: FunctionNode) -> Iterator[tuple[ast.arg, ast.expr]]:
+    """Yield each parameter of `func` that has a default, with that default."""
+    positional = [*func.args.posonlyargs, *func.args.args]
+    with_defaults = positional[len(positional) - len(func.args.defaults) :]
+    yield from zip(with_defaults, func.args.defaults, strict=True)
+    for parameter, default in zip(func.args.kwonlyargs, func.args.kw_defaults, strict=True):
+        if default is not None:
+            yield parameter, default
+
+
+def typer_default_hits(tree: ast.Module) -> list[Hit]:
+    """Return `typer-default` hits: `typer.Option` or `typer.Argument` as a parameter's default."""
+    names = imported_names(tree, "typer")
+    if not names.modules and not names.members:
+        return []
+    message = (
+        "Put the typer call in the annotation, and only the real default after `=`: "
+        "`count: Annotated[int, typer.Option(help=...)] = 3`, and for a required argument "
+        "`urls: Annotated[list[str], typer.Argument(help=...)]` with no default at all. "
+        "`options.py` has options, and `.claude/skills/python-cli-modern/reference/status.py` an "
+        "argument, in this form."
+    )
+    hits: list[Hit] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, FunctionNode):
+            continue
+        for parameter, default in _defaulted_parameters(node):
+            if not isinstance(default, ast.Call):
+                continue
+            called = _module_attribute(default.func, names)
+            if called in TYPER_PARAMETERS:
+                detail = f"`{parameter.arg}` defaults to `typer.{called}(...)`."
+                hits.append(Hit(default.lineno, "typer-default", message, detail))
+    return hits
+
+
 RULES: tuple[Callable[[ast.Module], list[Hit]], ...] = (
     scope_hits,
     comprehension_hits,
     raise_hits,
     attribute_hits,
     main_guard_hits,
+    client_hits,
+    patch_hits,
+    exit_hits,
+    typer_default_hits,
 )
 
 
@@ -249,7 +498,7 @@ def check_source(path: Path, source: str) -> list[Finding]:
         for hit in rule(tree):
             text = lines[hit.line - 1] if 0 < hit.line <= len(lines) else ""
             if not suppressed(text, hit.rule):
-                findings.append(Finding(path, hit.line, hit.rule, hit.message))
+                findings.append(Finding(path, hit.line, hit.rule, hit.message, hit.detail))
     return sorted(findings, key=_line_order)
 
 
