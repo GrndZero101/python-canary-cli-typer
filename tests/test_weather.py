@@ -8,6 +8,7 @@ callback points loguru at `sys.stderr` when `main` runs, which is the stream
 
 import functools
 import json
+from pathlib import Path
 
 import httpx
 import pytest
@@ -130,6 +131,19 @@ def test_main_output_json_emits_parseable_stdout(
 ) -> None:
     _serve(monkeypatch, client_returning())
     assert main(["weather", "cleve", "--output", "json"]) == 0
+    decoded = json.loads(capsys.readouterr().out)
+    assert decoded["description"] == "Sunny"
+
+
+def test_main_reads_the_config_file_named_by_the_global_flag(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text("output: json\n", encoding="utf-8")
+    _serve(monkeypatch, client_returning())
+    assert main(["--config", str(config_path), "weather", "cleve"]) == 0
     decoded = json.loads(capsys.readouterr().out)
     assert decoded["description"] == "Sunny"
 
