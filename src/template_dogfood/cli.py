@@ -22,7 +22,7 @@ import typer
 from .about import about_command
 from .config import PROG_NAME, SettingsError, load_settings
 from .logging_setup import configure_logging
-from .options import GlobalOptions, VerboseOption, VersionOption
+from .options import ConfigOption, GlobalOptions, VerboseOption, VersionOption
 from .typer_entrypoint import run_app
 from .weather import weather
 
@@ -38,13 +38,14 @@ def configure(
     ctx: typer.Context,
     *,
     verbose: VerboseOption = None,
+    config: ConfigOption = None,
     # Acted on by its eager callback before this body runs, so it is never read here.
     version: VersionOption = False,  # ruff: ignore[unused-function-argument]
 ) -> None:
     """Global options go before the command name."""
-    settings = load_settings(verbose=verbose)
+    settings = load_settings(verbose=verbose, config=config)
     configure_logging(verbose=settings.verbose)
-    ctx.obj = GlobalOptions(verbose=verbose)
+    ctx.obj = GlobalOptions(verbose=verbose, config=config)
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -81,21 +81,73 @@ uv run tdf-cli --verbose about        # global options go before the command
 uv run tdf-cli weather cleve          # current conditions from wttr.in
 ```
 
-Every setting resolves **flag, then environment variable, then default**:
+Every setting resolves **flag, then environment variable, then config file, then default**:
 
 | Setting | Flag | Environment variable | Default |
 |---|---|---|---|
+| Config file to read | `--config PATH` (global) | `TDF_CLI_CONFIG` | see below |
 | Debug logging to stderr | `--verbose` / `--no-verbose` (global) | `TDF_CLI_VERBOSE` | off |
 | Output format | `--output` / `-o` (per command) | `TDF_CLI_OUTPUT` | `table` |
 
-The docstring of `config.py` says how to add a setting. An invalid value from either source exits
-2 with a message naming both the flag and the variable.
+The config file is YAML, keyed by setting name, and need not exist:
+
+```yaml
+output: json
+verbose: true
+```
+
+It lives at `$XDG_CONFIG_HOME/tdf-cli/config.yaml` when `XDG_CONFIG_HOME` is set, on any
+platform; otherwise at `~/.config/tdf-cli/config.yaml` on Linux and macOS, and
+`%APPDATA%\tdf-cli\config.yaml` on Windows. `tdf-cli about` shows the path in use.
+
+The docstring of `config.py` says how to add a setting. An invalid value from any source exits 2
+with a message naming the flag, the variable and the config file.
 
 Shell completion is emitted rather than installed:
 
 ```bash
 _TDF_CLI_COMPLETE=source_zsh tdf-cli > "${ZDOTDIR:-$HOME}/completions/_tdf-cli"
 ```
+
+## Installing it
+
+`uv run tdf-cli` works inside this project. To put `tdf-cli` on your PATH
+everywhere, in an isolated environment of its own:
+
+```bash
+uv tool install .                         # a snapshot of this checkout
+uv tool install --editable .              # while developing: source edits apply at once
+uv tool install git+https://github.com/<owner>/<repo>           # for anyone, from git
+uv tool install git+https://github.com/<owner>/<repo>@v0.2.0    # a tagged release
+uv tool update-shell                      # once, if uv warns its bin directory is not on PATH
+```
+
+The command lands in `uv tool dir --bin`. uv manages the tool by its package name,
+`template-dogfood`:
+
+```bash
+uv tool upgrade template-dogfood
+uv tool uninstall template-dogfood
+```
+
+An upgrade rebuilds from where the tool was installed — this checkout or the git URL — so after
+pulling or editing, it picks up both the new code and the new version.
+
+## Releasing a version
+
+The version lives in `pyproject.toml` alone; `tdf-cli --version` reads it from the
+installed package. Bump it on a branch like any other change, finish the branch, then tag `main`:
+
+```bash
+git switch -c chore/release
+uv version --bump patch                   # or minor / major; updates pyproject.toml and uv.lock
+git commit -am "chore(release): bump to $(uv version --short)"
+uv run python tools/finish_branch.py "chore(release): bump to $(uv version --short)"
+git tag "v$(uv version --short)" && git push origin main --tags
+```
+
+An editable install reports the version it was installed at until it is reinstalled with
+`uv tool install --editable . --reinstall`; its code, unlike its version, is always current.
 
 ## Updating from the template
 
