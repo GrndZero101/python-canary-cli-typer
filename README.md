@@ -26,7 +26,9 @@ by lint config and a `prek` gate — not just documented and hoped for.
   `git-workflow` skill), `hook_payload.py` (shared parsing), and
   `debug_module.py` and `debug_pytest.py` (let the DebugMCP CLI debug a source module and a test
   file; see below).
-- **`.claude/skills/`** — the conventions for this stack, loaded by an agent when they apply.
+- **`.claude/skills/`** — the conventions for this stack, loaded by an agent when they apply:
+  `python-cli-modern` for commands and settings, and `python-data` and `python-tui` for a
+  command that crunches files or draws a full-screen interface.
 - **`.debugmcp.json`** — debugger adapters for an agent driving [DebugMCP](https://github.com/microsoft/DebugMCP).
 - **`CLAUDE.md`** — the full rule set: structure, debuggability, agent-friendliness, portability,
   branching, and commit conventions, plus a table of exactly what is enforced by what.
