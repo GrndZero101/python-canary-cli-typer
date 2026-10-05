@@ -54,8 +54,9 @@ def collect_about(
 def build_about_table(about: About) -> Table:
     """Return a two-column table, one row per fact and one per setting."""
     table = Table(show_header=False)
-    table.add_column("Key", style="bold")
-    table.add_column("Value")
+    # Fold rather than truncate: a variable name or a config path cut to "…" cannot be copied.
+    table.add_column("Key", style="bold", overflow="fold")
+    table.add_column("Value", overflow="fold")
     table.add_row("Name", about.name)
     table.add_row("Version", about.version)
     table.add_row("Python", about.python)
@@ -78,7 +79,6 @@ def emit_about(about: About, fmt: OutputFormat) -> None:
 
 def about_command(ctx: typer.Context, output: OutputOption = None) -> None:
     """Show this tool's version, runtime and resolved configuration."""
-    options = global_options(ctx)
-    settings = load_settings(verbose=options.verbose, config=options.config, output=output)
+    settings = load_settings(global_options(ctx), output=output)
     logger.debug("resolved {!r}", settings)
     emit_about(collect_about(settings), settings.output)

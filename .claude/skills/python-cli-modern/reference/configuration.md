@@ -67,7 +67,7 @@ environment so a variable can still override it for one run:
   but the fix is quoting, so say so in any example a user copies.
 - **Unknown keys are an error naming the file**, as `extra="forbid"` makes them for the other
   sources. A typo in a config file must not be silently ignored.
-- **`config` is itself a setting**: `--config` beats `<PREFIX>CONFIG`, which beats the default
+- **`config` is itself a setting**: `--config` beats `<PREFIX>_CONFIG`, which beats the default
   location. `ConfigFileSource` runs after the init and environment sources and reads the resolved
   value from `current_state`; the file cannot name itself. A file named this way must exist; the
   default need not, and `about` shows which path is in use.
@@ -81,9 +81,16 @@ environment so a variable can still override it for one run:
   command's behaviour, which is the surprise the `.env` default avoids.
 
 Global options live on `@app.callback()`, which stores what it was given in a frozen
-`GlobalOptions` on `ctx.obj`. Each command reads it back with `global_options(ctx)` and calls
-`load_settings` once with its own flags added, so settings are validated in one place and the
-command body sees a single typed `Settings`, never a raw `ctx.obj`.
+`GlobalOptions` on `ctx.obj`. Each command calls `load_settings(global_options(ctx), ...)` once,
+with its own flags as keywords, so settings are validated in one place and the command body sees a
+single typed `Settings`, never a raw `ctx.obj`.
+
+**The global options travel whole, and `load_settings` requires them.** When each command copied
+the globals into `load_settings` one keyword at a time, adding `--config` meant editing every
+command, and a command that missed the edit accepted `--config` and silently ignored it — which a
+real project's update did. Now a new global option is a field on `GlobalOptions` and reaches every
+command untouched, and a command that forgets the argument fails `ty` and raises `TypeError`
+rather than quietly dropping the flags. Where there is no command line, pass `GlobalOptions()`.
 
 Do not merge a command's overrides into existing settings with `model_copy(update=...)` — it skips
 validation entirely. Construct a new `Settings`.

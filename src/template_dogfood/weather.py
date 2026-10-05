@@ -101,8 +101,7 @@ def weather(
     ] = DEFAULT_TIMEOUT_SECONDS,
 ) -> None:
     """Look up current weather conditions for a town, village or city."""
-    options = global_options(ctx)
-    settings = load_settings(verbose=options.verbose, config=options.config, output=output)
+    settings = load_settings(global_options(ctx), output=output)
     query = " ".join(location)
     logger.debug("querying wttr.in for {!r}", query)
     try:
