@@ -1,7 +1,7 @@
 [project]
 name = "template-dogfood"
 version = "0.1.0"
-description = "Consumer of python-template, used to exercise the template in real use"
+description = "Consumer of python-template-base, used to exercise the template in real use"
 readme = "README.md"
 authors = [
     { name = "Timothy Longbottom", email = "53392540+GrndZero101@users.noreply.github.com" }

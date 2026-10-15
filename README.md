@@ -1,8 +1,8 @@
 # Template Dogfood
 
-Consumer of python-template, used to exercise the template in real use
+Consumer of python-template-base, used to exercise the template in real use
 
-Generated from [python-template](https://github.com/GrndZero101/python-template), built
+Generated from [python-template-base](https://github.com/GrndZero101/python-template-base), built
 around one idea: every rule in [CLAUDE.md](CLAUDE.md) exists so a human (or an AI agent) can stop
 the program and inspect it. Structure, debuggability and portability rules are mechanically enforced
 by lint config and a `prek` gate — not just documented and hoped for.
