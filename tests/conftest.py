@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from loguru import logger
 
-from template_dogfood.config import ENV_PREFIX
+from python_canary_cli_typer.config import ENV_PREFIX
 
 
 @pytest.fixture(autouse=True)

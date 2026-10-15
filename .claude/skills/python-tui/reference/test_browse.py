@@ -13,10 +13,10 @@ from pathlib import Path
 import pytest
 from textual.widgets import DataTable, Input
 
-from template_dogfood import browse
-from template_dogfood.browse import BrowseApp
-from template_dogfood.cli import main
-from template_dogfood.rows import RowTable
+from python_canary_cli_typer import browse
+from python_canary_cli_typer.browse import BrowseApp
+from python_canary_cli_typer.cli import main
+from python_canary_cli_typer.rows import RowTable
 
 SOURCE = RowTable(
     headers=("name", "region"),

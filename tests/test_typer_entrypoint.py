@@ -10,7 +10,7 @@ from typing import Annotated
 import pytest
 import typer
 
-from template_dogfood.typer_entrypoint import run_app
+from python_canary_cli_typer.typer_entrypoint import run_app
 
 EXIT_CODE = 3
 

@@ -13,10 +13,10 @@ import httpx
 import pytest
 import typer
 
-from template_dogfood import status
-from template_dogfood.cli import main
-from template_dogfood.http_client import build_client
-from template_dogfood.status import Probe, parse_url, probe, probe_all
+from python_canary_cli_typer import status
+from python_canary_cli_typer.cli import main
+from python_canary_cli_typer.http_client import build_client
+from python_canary_cli_typer.status import Probe, parse_url, probe, probe_all
 
 ROUTES = {
     "https://up.example.test/": 200,

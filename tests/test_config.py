@@ -18,9 +18,9 @@ from typing import Any
 import pytest
 import typer
 
-from template_dogfood import config
-from template_dogfood.cli import app
-from template_dogfood.config import (
+from python_canary_cli_typer import config
+from python_canary_cli_typer.cli import app
+from python_canary_cli_typer.config import (
     ENV_PREFIX,
     GlobalOptions,
     Settings,
@@ -29,7 +29,7 @@ from template_dogfood.config import (
     load_settings,
     secret_fields,
 )
-from template_dogfood.output import OutputFormat
+from python_canary_cli_typer.output import OutputFormat
 
 OUTPUT_VAR = env_var("output")
 VERBOSE_VAR = env_var("verbose")

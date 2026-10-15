@@ -31,7 +31,7 @@ from .config_file import ConfigFileError, ConfigFileSource, default_config_path
 from .output import OutputFormat
 
 PROG_NAME = "tdf-cli"
-DIST_NAME = "template-dogfood"
+DIST_NAME = "python-canary-cli-typer"
 ENV_PREFIX = "TDF_CLI_"
 
 

@@ -9,5 +9,5 @@ author_name: Timothy Longbottom
 copyright_holder: Timothy Longbottom
 copyright_year: '2026'
 license: MIT
-project_name: Template Dogfood
+project_name: Python Canary CLI Typer
 python_version: '3.14'

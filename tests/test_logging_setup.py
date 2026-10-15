@@ -4,7 +4,7 @@ import logging
 
 import pytest
 
-from template_dogfood.logging_setup import configure_logging
+from python_canary_cli_typer.logging_setup import configure_logging
 
 
 def test_a_stdlib_record_names_the_module_that_logged_it(

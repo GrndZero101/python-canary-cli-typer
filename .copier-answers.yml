@@ -9,9 +9,9 @@ base_template: gh:GrndZero101/python-template-base
 copyright_holder: Timothy Longbottom
 copyright_year: '2026'
 license: MIT
-package_name: template_dogfood
-project_description: Consumer of python-template-base, used to exercise the template
-    in real use
-project_name: Template Dogfood
+package_name: python_canary_cli_typer
+project_description: Canary consumer of python-template-cli-typer, exercising the
+    template in real use
+project_name: Python Canary CLI Typer
 python_version: '3.14'
 script_name: tdf-cli
