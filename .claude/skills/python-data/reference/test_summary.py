@@ -12,8 +12,8 @@ import pytest
 import typer
 from polars.testing import assert_frame_equal
 
-from template_dogfood.cli import main
-from template_dogfood.summary import (
+from python_canary_cli_typer.cli import main
+from python_canary_cli_typer.summary import (
     RECORD_SCHEMA,
     SUMMARY_SCHEMA,
     parse_records_path,

@@ -1,7 +1,7 @@
 [project]
-name = "template-dogfood"
+name = "python-canary-cli-typer"
 version = "0.1.0"
-description = "Consumer of python-template-base, used to exercise the template in real use"
+description = "Canary consumer of python-template-cli-typer, exercising the template in real use"
 readme = "README.md"
 authors = [
     { name = "Timothy Longbottom", email = "53392540+GrndZero101@users.noreply.github.com" }
@@ -19,7 +19,7 @@ dependencies = [
 ]
 
 [project.scripts]
-tdf-cli = "template_dogfood.cli:main"
+tdf-cli = "python_canary_cli_typer.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.12.21,<0.13.0"]

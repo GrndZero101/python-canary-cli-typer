@@ -1,6 +1,6 @@
-# Template Dogfood
+# Python Canary CLI Typer
 
-Consumer of python-template-base, used to exercise the template in real use
+Canary consumer of python-template-cli-typer, exercising the template in real use
 
 Generated from [python-template-cli-typer](https://github.com/GrndZero101/python-template-cli-typer)
 on [python-template-base](https://github.com/GrndZero101/python-template-base), built
@@ -10,7 +10,7 @@ by lint config and a `prek` gate — not just documented and hoped for.
 
 ## What's here
 
-- **`src/template_dogfood/`** — the package. It ships a
+- **`src/python_canary_cli_typer/`** — the package. It ships a
   scaffold CLI, `tdf-cli`, on typer, pydantic-settings, rich and loguru, with one
   placeholder command, `about`. Replace it or build beside it; the plumbing around it — settings,
   output, logging, the entry point — is meant to stay. Built beside it: `weather`, which looks up
@@ -126,11 +126,11 @@ uv tool update-shell                      # once, if uv warns its bin directory 
 ```
 
 The command lands in `uv tool dir --bin`. uv manages the tool by its package name,
-`template-dogfood`:
+`python-canary-cli-typer`:
 
 ```bash
-uv tool upgrade template-dogfood
-uv tool uninstall template-dogfood
+uv tool upgrade python-canary-cli-typer
+uv tool uninstall python-canary-cli-typer
 ```
 
 An upgrade rebuilds from where the tool was installed — this checkout or the git URL — so after

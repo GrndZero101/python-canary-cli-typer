@@ -13,9 +13,14 @@ from pathlib import Path
 import httpx
 import pytest
 
-from template_dogfood.cli import main
-from template_dogfood.http_client import build_client
-from template_dogfood.weather import WTTR_URL, WeatherReport, fetch_weather, render_weather_json
+from python_canary_cli_typer.cli import main
+from python_canary_cli_typer.http_client import build_client
+from python_canary_cli_typer.weather import (
+    WTTR_URL,
+    WeatherReport,
+    fetch_weather,
+    render_weather_json,
+)
 
 CLEVE_REPORT = {
     "current_condition": [
@@ -65,7 +70,7 @@ def _serving(client: httpx.Client, **_kwargs: object) -> httpx.Client:
 def _serve(monkeypatch: pytest.MonkeyPatch, client: httpx.Client) -> None:
     """Make the command's own client `client`."""
     monkeypatch.setattr(
-        "template_dogfood.weather.build_client", functools.partial(_serving, client)
+        "python_canary_cli_typer.weather.build_client", functools.partial(_serving, client)
     )
 
 

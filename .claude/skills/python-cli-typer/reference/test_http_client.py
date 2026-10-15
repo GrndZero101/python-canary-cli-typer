@@ -9,8 +9,8 @@ from datetime import UTC, datetime
 
 import httpx
 
-from template_dogfood.config import PROG_NAME
-from template_dogfood.http_client import (
+from python_canary_cli_typer.config import PROG_NAME
+from python_canary_cli_typer.http_client import (
     MAX_ATTEMPTS,
     build_client,
     parse_retry_after,

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from template_dogfood.rows import RowTable, matching_rows, read_rows
+from python_canary_cli_typer.rows import RowTable, matching_rows, read_rows
 
 ROWS = (("web-1", "eu-west-1"), ("web-2", "us-east-1"), ("db-1", "EU-west-1"))
 

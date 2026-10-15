@@ -9,16 +9,16 @@ from pathlib import Path
 
 import pytest
 
-from template_dogfood.cli import main
-from template_dogfood.config import (
+from python_canary_cli_typer.cli import main
+from python_canary_cli_typer.config import (
     PROG_NAME,
     GlobalOptions,
     SettingsError,
     env_var,
     load_settings,
 )
-from template_dogfood.config_file import CONFIG_FILE_NAME, default_config_path
-from template_dogfood.output import OutputFormat
+from python_canary_cli_typer.config_file import CONFIG_FILE_NAME, default_config_path
+from python_canary_cli_typer.output import OutputFormat
 
 OUTPUT_VAR = env_var("output")
 CONFIG_VAR = env_var("config")

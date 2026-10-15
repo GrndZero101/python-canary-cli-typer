@@ -7,9 +7,9 @@ from pathlib import Path
 import pytest
 from rich.console import Console
 
-from template_dogfood.about import About, build_about_table, collect_about
-from template_dogfood.cli import main
-from template_dogfood.config import (
+from python_canary_cli_typer.about import About, build_about_table, collect_about
+from python_canary_cli_typer.cli import main
+from python_canary_cli_typer.config import (
     PROG_NAME,
     GlobalOptions,
     Settings,
