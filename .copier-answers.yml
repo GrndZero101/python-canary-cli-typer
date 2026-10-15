@@ -1,13 +1,17 @@
 # This file records the answers given when the project was generated.
 # `copier update` reads it to re-apply template changes. Do not delete it, and do not edit it
 # by hand — copier overwrites it on every update.
-_commit: 2957d4c
-_src_path: gh:GrndZero101/python-template-base
+_commit: ac50467
+_src_path: gh:GrndZero101/python-template-cli-typer
 author_email: 53392540+GrndZero101@users.noreply.github.com
 author_name: Timothy Longbottom
+base_template: gh:GrndZero101/python-template-base
+copyright_holder: Timothy Longbottom
+copyright_year: '2026'
+license: MIT
 package_name: template_dogfood
-project_description: Consumer of python-template-base, used to exercise the template in
-    real use
+project_description: Consumer of python-template-base, used to exercise the template
+    in real use
 project_name: Template Dogfood
 python_version: '3.14'
 script_name: tdf-cli

@@ -2,7 +2,8 @@
 
 Consumer of python-template-base, used to exercise the template in real use
 
-Generated from [python-template-base](https://github.com/GrndZero101/python-template-base), built
+Generated from [python-template-cli-typer](https://github.com/GrndZero101/python-template-cli-typer)
+on [python-template-base](https://github.com/GrndZero101/python-template-base), built
 around one idea: every rule in [CLAUDE.md](CLAUDE.md) exists so a human (or an AI agent) can stop
 the program and inspect it. Structure, debuggability and portability rules are mechanically enforced
 by lint config and a `prek` gate — not just documented and hoped for.
@@ -27,7 +28,7 @@ by lint config and a `prek` gate — not just documented and hoped for.
   `debug_module.py` and `debug_pytest.py` (let the DebugMCP CLI debug a source module and a test
   file; see below).
 - **`.claude/skills/`** — the conventions for this stack, loaded by an agent when they apply:
-  `python-cli-modern` for commands and settings, and `python-data` and `python-tui` for a
+  `python-cli-typer` for commands and settings, and `python-data` and `python-tui` for a
   command that crunches files or draws a full-screen interface.
 - **`.debugmcp.json`** — debugger adapters for an agent driving [DebugMCP](https://github.com/microsoft/DebugMCP).
 - **`CLAUDE.md`** — the full rule set: structure, debuggability, agent-friendliness, portability,
