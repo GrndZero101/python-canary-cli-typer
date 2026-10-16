@@ -154,14 +154,30 @@ An editable install reports the version it was installed at until it is reinstal
 
 ## Updating from the template
 
+The project comes from two templates, and each updates separately, touching only its own files:
+the CLI layer (`src/`, `tests/`, `pyproject.toml`, this README), recorded in
+`.copier-answers.yml`, and the base under it (`CLAUDE.md`, `tools/`, the hooks, the shared
+skills), recorded in `.copier-answers.base.yml`. Run both, the CLI layer first. Each needs a clean
+tree, so commit between them:
+
 ```bash
-copier update --trust
+git switch -c chore/template-update
+copier update --trust                                 # the CLI layer
+# resolve conflicts, if any; then:
+uv sync && git add -A && git commit -m "chore(template): update the cli layer"
+copier update --trust -a .copier-answers.base.yml     # the base
+# resolve conflicts, if any; then:
+uv sync && git add -A && git commit -m "chore(template): update the base"
+uv run python tools/finish_branch.py "chore(template): update from the templates"
 ```
 
-Requires a clean tree and the `.copier-answers.yml` written at generation. Do not delete that file.
+Do not delete either answers file: `copier update` reads it to know what you answered.
 `--trust` is required because the template declares `_tasks`. They run on the first copy only, but
 copier asks for the flag anyway and exits 4 without it. Run it in your own terminal, not through
-an agent: it is the flag an agent's permission classifier refuses.
+an agent: it is the flag an agent's permission classifier refuses. `uv sync` comes before any
+check, so a dependency the template dropped is gone from `.venv` too. Conflicts, new questions and
+pinning a version:
+[Keeping it in sync](https://github.com/GrndZero101/python-template-cli-typer#keeping-it-in-sync-with-the-template).
 
 ## License
 

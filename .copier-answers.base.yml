@@ -2,7 +2,7 @@
 # `copier update -a .copier-answers.base.yml` reads it to re-apply base changes. Do not delete it,
 # and do not edit it by hand — copier overwrites it on every update. The use case's answers are in
 # .copier-answers.yml, which a plain `copier update` reads.
-_commit: 07a1f78
+_commit: 0bd228a
 _src_path: gh:GrndZero101/python-template-base
 author_email: 53392540+GrndZero101@users.noreply.github.com
 author_name: Timothy Longbottom
