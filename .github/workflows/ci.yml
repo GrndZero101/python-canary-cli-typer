@@ -1,0 +1,58 @@
+# CI: the same gate and tests as a commit runs locally, on a machine that is not the author's.
+#
+# Deliberately thin. Every check lives in .pre-commit-config.yaml and the test suite, so this file
+# only installs the tools and runs the two commands; a check added to the gate is checked here with
+# no change to this file. Shipped by the template's `ci` question; answering `none` on an update
+# removes it.
+#
+# Actions are pinned by commit SHA with the release in a comment; a tag can be moved, a SHA cannot.
+# The toolchain is not pinned: setup-uv installs the latest uv, and prek and the gate's hooks run
+# at their latest, as on a developer's machine.
+
+name: CI
+
+# Pushes to main and pull requests, not every branch push: on a private repository each run is
+# billed against the account's minutes. Run it by hand (workflow_dispatch) to check a branch.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        # Linux only by default. On a private repository a Free account has 2,000 minutes a month,
+        # and Windows minutes count double and macOS ten times. Uncomment to check them too; a
+        # public repository runs every OS free.
+        os:
+          - ubuntu-latest
+          # - macos-latest
+          # - windows-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # No `python-version` input: it exports UV_PYTHON, which would override .python-version.
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          cache-python: true
+      # setup-uv puts uv's tool bin directory on PATH only on Windows. bash, so the line is the
+      # same on every OS.
+      - run: uv tool dir --bin >> "$GITHUB_PATH"
+        shell: bash
+      - run: uv tool install prek
+      # no-commit-to-branch refuses work on main, which is what a push to main checks out.
+      - run: prek run --all-files --show-diff-on-failure --skip no-commit-to-branch
+      - run: uv run pytest

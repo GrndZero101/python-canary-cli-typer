@@ -1,11 +1,12 @@
 # This file records the answers given when the project was generated.
 # `copier update` reads it to re-apply template changes. Do not delete it, and do not edit it
 # by hand — copier overwrites it on every update.
-_commit: d6bac69
+_commit: 8c36415
 _src_path: gh:GrndZero101/python-template-cli-typer
 author_email: 53392540+GrndZero101@users.noreply.github.com
 author_name: Timothy Longbottom
 base_template: gh:GrndZero101/python-template-base
+ci: github
 copyright_holder: Timothy Longbottom
 copyright_year: '2026'
 license: MIT
