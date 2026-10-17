@@ -75,6 +75,10 @@ Run the linters **through prek, never directly.** `ty` is not installed outside 
 always the latest release, and disagree with it. prek runs what the commit will, so what passes here
 passes at commit.
 
+GitHub Actions runs the same two checks, the whole gate and the tests, on pushes to `main` and on
+pull requests. It runs Linux only, since macOS and Windows minutes cost more on a private
+repository; [the workflow](.github/workflows/ci.yml) says how to add them.
+
 ## Using the CLI
 
 ```bash
