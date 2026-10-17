@@ -71,8 +71,9 @@ uv run pytest                           # tests, which the gate does not run
 ```
 
 Run the linters **through prek, never directly.** `ty` is not installed outside the gate, so
-`ty check` is "command not found", and a `ruff` on PATH can be a different version from the hook's
-pin and disagree with it. prek runs the pinned versions, so what passes here passes at commit.
+`ty check` is "command not found", and a `ruff` on PATH can be older than the hook's, which is
+always the latest release, and disagree with it. prek runs what the commit will, so what passes here
+passes at commit.
 
 ## Using the CLI
 
@@ -157,24 +158,26 @@ An editable install reports the version it was installed at until it is reinstal
 The project comes from two templates, and each updates separately, touching only its own files:
 the CLI layer (`src/`, `tests/`, `pyproject.toml`, this README), recorded in
 `.copier-answers.yml`, and the base under it (`CLAUDE.md`, `tools/`, the hooks, the shared
-skills), recorded in `.copier-answers.base.yml`. Run both, the CLI layer first. Each needs a clean
-tree, so commit between them:
+skills), recorded in `.copier-answers.base.yml`. Run both, the base first: the CLI layer is
+written against the base, so a CLI change that needs a base change then never lands ahead of it.
+Each needs a clean tree, so commit between them:
 
 ```bash
 git switch -c chore/template-update
-copier update --trust                                 # the CLI layer
-# resolve conflicts, if any; then:
-uv sync && git add -A && git commit -m "chore(template): update the cli layer"
 copier update --trust -a .copier-answers.base.yml     # the base
 # resolve conflicts, if any; then:
 uv sync && git add -A && git commit -m "chore(template): update the base"
+copier update --trust                                 # the CLI layer
+# resolve conflicts, if any; then:
+uv sync && git add -A && git commit -m "chore(template): update the cli layer"
 uv run python tools/finish_branch.py "chore(template): update from the templates"
 ```
 
 Do not delete either answers file: `copier update` reads it to know what you answered.
-`--trust` is required because the template declares `_tasks`. They run on the first copy only, but
-copier asks for the flag anyway and exits 4 without it. Run it in your own terminal, not through
-an agent: it is the flag an agent's permission classifier refuses. `uv sync` comes before any
+`--trust` is required because the template declares `_tasks`. They run on the first copy only, so
+an update runs none of them, but copier asks for the flag anyway and exits 4 without it. An agent
+can run the update with `--defaults`, since it cannot answer copier's prompts; a new question then
+takes the template's default, so check `git diff` on both answers files. `uv sync` comes before any
 check, so a dependency the template dropped is gone from `.venv` too. Conflicts, new questions and
 pinning a version:
 [Keeping it in sync](https://github.com/GrndZero101/python-template-cli-typer#keeping-it-in-sync-with-the-template).

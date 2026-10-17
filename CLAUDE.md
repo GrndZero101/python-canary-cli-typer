@@ -119,7 +119,7 @@ which rest on your own discipline.
 | `main` receives merge commits, never fast-forwards | `tools/finish_branch.py`, when the branch is finished with it |
 | Merge subject describes the work, never `Merge branch '...'` | `tools/finish_branch.py`, when the branch is finished with it — by hand, review only: `Merge` is exempt from the message check |
 | Clean tree before starting work | *convention — `SessionStart` reports it, does not block* |
-| `prek` installed and all three git shims present | `tools/session_doctor.py` via `SessionStart` — reports, does not block |
+| `prek` installed and all three git shims present; `uv` at its latest | `tools/session_doctor.py` via `SessionStart` — reports, does not block |
 | Commit summary ≤72 chars, imperative | *convention — review only* |
 | One logical change per commit | *convention — review only* |
 | Name intermediates | *convention — review only* |
@@ -161,8 +161,9 @@ uv run pytest                           # tests, which the gate does not run
 ```
 
 Run the linters **through prek, never directly.** `ty` is not installed outside the gate, so
-`ty check` is "command not found", and a `ruff` on PATH can be a different version from the hook's
-pin and disagree with it. prek runs the pinned versions, so what passes here passes at commit.
+`ty check` is "command not found", and a `ruff` on PATH can be older than the hook's, which is
+always the latest release, and disagree with it. prek runs what the commit will, so what passes here
+passes at commit.
 
 First-time setup needs **all three** shims. `prek install` alone wires only `pre-commit`, which
 silently disables the commit-message check *and* makes `git merge --no-ff` into `main` fail:
