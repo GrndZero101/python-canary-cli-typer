@@ -9,6 +9,13 @@
 # commit-msg check would never fire and `git merge --no-ff` into main would be
 # blocked by no-commit-to-branch:
 #   prek install -t pre-commit -t commit-msg -t pre-merge-commit
+
+# A hook with no `stages` of its own runs at these. Without the list it runs at every installed
+# stage, so a commit runs the whole gate again at commit-msg, and ty, which is always_run,
+# re-checks the whole project there. pre-merge-commit is the merge's gate; manual keeps
+# `prek run --hook-stage manual <id>` working. A hook's own `stages` still wins.
+default_stages: [pre-commit, pre-merge-commit, manual]
+
 repos:
   - repo: builtin
     hooks:
@@ -35,22 +42,42 @@ repos:
         args: [--branch, main]
         stages: [pre-commit]
 
+  # Every tool from here on runs at its latest release. None has a version or a `rev`, so nothing
+  # here goes stale and a `copier update` never conflicts over one. Each is a local hook run through
+  # `uv run --with <tool>`, with its upstream hook's entry and file types. uv resolves the tool on
+  # every run and trusts its cached copy of PyPI's answer for ten minutes, so a release reaches the
+  # gate within that, and a warm run costs about ten milliseconds. Offline, a hook fails once that
+  # cache is stale, as any `uv run --with` does. `--no-project` keeps a tool that imports nothing
+  # from the project out of its venv.
+
   # Enforces the `type(scope): summary` rule in CLAUDE.md at commit time.
   # Default types match that list exactly, so no args are needed.
   # Note: it does NOT check summary length — the 72-char rule stays convention.
-  - repo: https://github.com/compilerla/conventional-pre-commit
-    rev: v4.4.0
+  - repo: local
     hooks:
       - id: conventional-pre-commit
+        name: Conventional Commit
+        entry: uv run --no-project --with conventional-pre-commit conventional-pre-commit
+        language: system
+        always_run: true
         stages: [commit-msg]
 
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.10
+  - repo: local
     hooks:
       # The fixer before the formatter: a fix can leave code that needs reformatting.
-      - id: ruff-check  # `ruff` is a legacy alias as of v0.16.0
+      - id: ruff-check
+        name: ruff check
+        entry: uv run --no-project --with ruff ruff check --force-exclude
         args: [--fix]
+        language: system
+        types_or: [python, pyi, jupyter]
+        require_serial: true
       - id: ruff-format
+        name: ruff format
+        entry: uv run --no-project --with ruff ruff format --force-exclude
+        language: system
+        types_or: [python, pyi, jupyter, markdown]
+        require_serial: true
 
   # ty, run directly rather than through ty-pre-commit. That hook runs uv's `uv check`, which
   # skips every file with a PEP 723 header and forwards no flags, so a uv script under scripts/
@@ -61,23 +88,39 @@ repos:
     hooks:
       - id: ty
         name: ty
-        entry: uv run --with ty==0.0.84 ty check
+        entry: uv run --with ty ty check
         language: system
         types_or: [python, pyi]
         pass_filenames: false
         always_run: true
         require_serial: true
 
-  - repo: https://github.com/rvben/rumdl-pre-commit
-    rev: v0.2.78
+  - repo: local
     hooks:
       - id: rumdl-fmt
+        name: rumdl fmt
+        entry: uv run --no-project --with rumdl rumdl fmt
+        language: system
+        types: [markdown]
+        require_serial: true
       - id: rumdl
+        name: rumdl check
+        entry: uv run --no-project --with rumdl rumdl check
+        language: system
+        types: [markdown]
+        require_serial: true
 
-  - repo: https://github.com/astral-sh/uv-pre-commit
-    rev: 0.12.22
+  # uv-pre-commit's uv-lock, as a local hook: that one installs the uv of its `rev`, a pin that
+  # disagreed with the installed uv, while this runs whichever uv is installed, as everything else
+  # here does. Same command and files as upstream's.
+  - repo: local
     hooks:
       - id: uv-lock
+        name: uv-lock
+        entry: uv lock
+        language: system
+        files: ^(uv\.lock|pyproject\.toml|uv\.toml)$
+        pass_filenames: false
 
   # The CLAUDE.md conventions no native linter covers: `def` or `class` inside a function, complex
   # comprehensions, `raise ... from None`, computed `getattr`, a `main` with no guard, an exit that
